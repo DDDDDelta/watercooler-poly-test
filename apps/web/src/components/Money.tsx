@@ -1,24 +1,16 @@
 import clsx from 'clsx';
-import { useId } from 'react';
 import { CURRENCY_NAME } from '@watercooler/shared';
 import { formatCompact, formatMoney } from '../lib/format';
 
-/** The currency glyph: a little gradient water drop. */
+/** The currency glyph: a little water drop in the brand colour. */
 export function Drop({ className }: { className?: string }) {
-  const id = useId();
   return (
-    <svg viewBox="0 0 16 16" className={clsx('inline-block size-[0.95em] shrink-0', className)} aria-hidden>
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#67e8f9" />
-          <stop offset="1" stopColor="#3b82f6" />
-        </linearGradient>
-      </defs>
-      <path d="M8 1.2c2.6 3.1 4.8 5.8 4.8 8.3a4.8 4.8 0 0 1-9.6 0c0-2.5 2.2-5.2 4.8-8.3Z" fill={`url(#${id})`} />
+    <svg viewBox="0 0 16 16" className={clsx('inline-block size-[0.95em] shrink-0 text-brand', className)} aria-hidden>
+      <path d="M8 1.2c2.6 3.1 4.8 5.8 4.8 8.3a4.8 4.8 0 0 1-9.6 0c0-2.5 2.2-5.2 4.8-8.3Z" fill="currentColor" />
       <path
         d="M6 10.2a2.1 2.1 0 0 0 2 2"
-        stroke="#fff"
-        strokeOpacity=".85"
+        stroke="#05060c"
+        strokeOpacity=".7"
         strokeWidth="1.1"
         strokeLinecap="round"
         fill="none"

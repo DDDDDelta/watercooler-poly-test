@@ -134,11 +134,6 @@ export function TradePanel({
 
   return (
     <Card className="relative overflow-hidden p-5">
-      <div
-        className="pointer-events-none absolute -top-24 -right-24 size-56 rounded-full opacity-30 blur-3xl"
-        style={{ background: color }}
-      />
-
       <div className="relative mb-4 flex items-center gap-1 rounded-xl border border-line bg-white/[0.02] p-1">
         {(['buy', 'sell'] as const).map((s) => (
           <button
@@ -214,7 +209,7 @@ export function TradePanel({
               onChange={(e) => (side === 'buy' ? setAmount(e.target.value) : setShares(e.target.value))}
               className={clsx(
                 'h-14 w-full rounded-xl border border-line bg-black/20 pr-4 text-right font-display text-2xl font-semibold tabular outline-none transition',
-                'placeholder:text-faint focus:border-brand-2/60 focus:shadow-[0_0_0_3px_rgb(34_211_238/0.12)]',
+                'placeholder:text-faint focus:border-brand/60 focus:shadow-[0_0_0_3px_rgb(255_122_26/0.14)]',
                 side === 'buy' ? 'pl-11' : 'pl-4',
               )}
             />
@@ -326,7 +321,9 @@ export function TradePanel({
             disabled={!canSubmit}
             loading={mutation.isPending}
             onClick={() => mutation.mutate()}
-            style={canSubmit ? { background: color, color: '#05060c', boxShadow: `0 0 28px -6px ${color}` } : undefined}
+            style={
+              canSubmit ? { background: color, color: '#05060c', boxShadow: `0 0 24px -10px ${color}` } : undefined
+            }
           >
             {insufficient
               ? '余额不足'
@@ -360,10 +357,6 @@ function ClosedPanel({ market }: { market: MarketDetail }) {
     const c = outcomeColor(winner.index, market.isBinary);
     return (
       <Card className="relative overflow-hidden p-6 text-center">
-        <div
-          className="pointer-events-none absolute -top-20 left-1/2 size-56 -translate-x-1/2 rounded-full opacity-30 blur-3xl"
-          style={{ background: c }}
-        />
         <Crown className="relative mx-auto size-8 text-gold" />
         <div className="relative mt-3 text-sm text-dim">最终结果</div>
         <div

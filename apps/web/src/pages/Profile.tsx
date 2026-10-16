@@ -22,9 +22,8 @@ export default function Profile() {
   return (
     <div>
       <Card className="relative overflow-hidden p-6 sm:p-8">
-        <div className="pointer-events-none absolute -top-32 -right-20 size-80 rounded-full bg-brand/25 blur-3xl" />
         <div className="relative flex flex-wrap items-center gap-5">
-          <div className="rounded-full bg-aurora p-[3px] shadow-[0_0_40px_-6px_rgb(139_92_246)]">
+          <div className="rounded-full bg-brand p-[3px]">
             <Avatar id={user.id} name={user.displayName} size={84} className="ring-4 ring-canvas" />
           </div>
           <div className="min-w-0 flex-1">
@@ -45,7 +44,7 @@ export default function Profile() {
           </div>
           <div className="text-right">
             <div className="text-xs text-faint">排名</div>
-            <div className="text-aurora font-display text-5xl font-bold">#{rank}</div>
+            <div className="text-brand font-display text-5xl font-bold">#{rank}</div>
           </div>
         </div>
       </Card>

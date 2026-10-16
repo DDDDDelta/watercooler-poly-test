@@ -1,15 +1,15 @@
 /** Outcome line/swatch colours for multi-outcome markets. */
 export const OUTCOME_COLORS = [
-  '#22d3ee',
-  '#a78bfa',
+  '#ff7a1a',
+  '#2dd4bf',
+  '#facc15',
   '#f472b6',
-  '#fbbf24',
-  '#34d399',
-  '#60a5fa',
-  '#fb923c',
-  '#e879f9',
+  '#38bdf8',
   '#a3e635',
-  '#f87171',
+  '#fb7185',
+  '#94a3b8',
+  '#fdba74',
+  '#c4b5fd',
 ];
 
 export const YES_COLOR = '#19e3a1';

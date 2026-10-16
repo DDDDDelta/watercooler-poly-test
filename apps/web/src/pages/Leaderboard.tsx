@@ -18,7 +18,7 @@ const PODIUM = [
     color: 'text-slate-300',
     h: 'sm:mt-8',
   },
-  { ring: 'from-amber-200 to-amber-500', glow: 'rgb(251 191 36 / 0.45)', icon: Crown, color: 'text-gold', h: '' },
+  { ring: 'bg-amber-400', glow: 'rgb(251 191 36 / 0.3)', icon: Crown, color: 'text-gold', h: '' },
   {
     ring: 'from-orange-300 to-orange-600',
     glow: 'rgb(251 146 60 / 0.35)',
@@ -71,7 +71,7 @@ export default function Leaderboard() {
             <Link key={e.user.id} to={`/u/${e.user.id}`} className={clsx('group', PODIUM[i]!.h)}>
               <Card className="glow-border relative flex flex-col items-center px-2 py-6 text-center transition group-hover:-translate-y-1">
                 <div
-                  className={clsx('rounded-full bg-gradient-to-br p-[3px]', PODIUM[i]!.ring)}
+                  className={clsx('rounded-full p-[3px]', PODIUM[i]!.ring)}
                   style={{ boxShadow: `0 0 40px ${PODIUM[i]!.glow}` }}
                 >
                   <Avatar
@@ -109,7 +109,7 @@ export default function Leaderboard() {
             <Avatar id={e.user.id} name={e.user.displayName} size={34} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">
-                {e.user.displayName} {e.user.id === me?.id && <span className="text-xs text-brand-2">（你）</span>}
+                {e.user.displayName} {e.user.id === me?.id && <span className="text-xs text-brand">（你）</span>}
               </div>
               <div className="text-xs text-faint">
                 {e.stats.tradeCount} 笔交易 · {e.stats.marketsTraded} 个市场

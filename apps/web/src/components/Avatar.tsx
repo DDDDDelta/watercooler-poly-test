@@ -1,17 +1,8 @@
 import clsx from 'clsx';
 
-const GRADIENTS = [
-  ['#22d3ee', '#8b5cf6'],
-  ['#f472b6', '#8b5cf6'],
-  ['#34d399', '#22d3ee'],
-  ['#fbbf24', '#f472b6'],
-  ['#60a5fa', '#a78bfa'],
-  ['#fb923c', '#ec4899'],
-  ['#a3e635', '#14b8a6'],
-  ['#e879f9', '#6366f1'],
-];
+const COLORS = ['#ea6a12', '#0f9f8f', '#d63a5a', '#c58a0a', '#2f9e4f', '#2b7fb8', '#6f9a12', '#56637a'];
 
-/** Deterministic gradient avatar with the user's first character. */
+/** Deterministic coloured avatar with the user's first character. */
 export function Avatar({
   id,
   name,
@@ -23,7 +14,6 @@ export function Avatar({
   size?: number;
   className?: string;
 }) {
-  const [a, b] = GRADIENTS[id % GRADIENTS.length]!;
   return (
     <span
       className={clsx(
@@ -34,7 +24,7 @@ export function Avatar({
         width: size,
         height: size,
         fontSize: size * 0.42,
-        background: `linear-gradient(135deg, ${a}, ${b})`,
+        background: COLORS[id % COLORS.length],
         boxShadow: `0 0 0 1px rgb(255 255 255 / 0.12) inset`,
       }}
       aria-hidden

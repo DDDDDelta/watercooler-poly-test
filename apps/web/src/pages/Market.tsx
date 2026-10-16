@@ -161,7 +161,7 @@ function ResolutionBanner({ market }: { market: MarketDetail }) {
   const winner = market.outcomes.find((o) => o.id === market.resolvedOutcomeId);
   const styles = {
     closed: 'border-gold/30 bg-gold/[0.07] text-gold',
-    resolved: 'border-brand-2/30 bg-brand-2/[0.07] text-brand-2',
+    resolved: 'border-brand/30 bg-brand/[0.07] text-brand',
     cancelled: 'border-line-strong bg-white/[0.03] text-dim',
   }[market.status];
   return (
@@ -238,7 +238,7 @@ function Comments({ marketId }: { marketId: number }) {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-line p-4 text-center text-sm text-faint">
-          <Link to="/login" className="text-brand-2 hover:underline">
+          <Link to="/login" className="text-brand hover:underline">
             登录
           </Link>{' '}
           后参与讨论
@@ -429,7 +429,7 @@ function AdminPanel({ market }: { market: MarketDetail }) {
                 onClick={() => setOutcomeId(o.id)}
                 className={clsx(
                   'flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition',
-                  outcomeId === o.id ? 'border-brand-2 bg-brand-2/10' : 'border-line hover:bg-white/[0.04]',
+                  outcomeId === o.id ? 'border-brand bg-brand/10' : 'border-line hover:bg-white/[0.04]',
                 )}
               >
                 {o.label}
@@ -532,7 +532,7 @@ export default function Market() {
       <div className="space-y-5">
         <Card className="p-5">
           <h2 className="flex items-center gap-2 font-semibold">
-            <ScrollText className="size-4 text-brand-2" /> 结算规则
+            <ScrollText className="size-4 text-brand" /> 结算规则
           </h2>
           <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg/80">
             {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由管理员结算。'}

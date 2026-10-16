@@ -13,7 +13,6 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: Rea
   return (
     <div className="flex min-h-[70vh] items-center justify-center py-8">
       <div className="relative w-full max-w-md">
-        <div className="pointer-events-none absolute -inset-6 rounded-[2rem] bg-aurora opacity-20 blur-3xl" />
         <div className="glass relative rounded-3xl p-8">
           <div className="mb-6 flex justify-center">
             <Logo />
@@ -84,7 +83,7 @@ export function Login() {
       </form>
       <p className="mt-6 text-center text-sm text-dim">
         还没有账号？{' '}
-        <Link to={`/register${params.toString() ? `?${params}` : ''}`} className="text-brand-2 hover:underline">
+        <Link to={`/register${params.toString() ? `?${params}` : ''}`} className="text-brand hover:underline">
           注册一个
         </Link>
       </p>
@@ -157,7 +156,7 @@ export function Register() {
       </form>
       <p className="mt-6 text-center text-sm text-dim">
         已有账号？{' '}
-        <Link to="/login" className="text-brand-2 hover:underline">
+        <Link to="/login" className="text-brand hover:underline">
           去登录
         </Link>
       </p>

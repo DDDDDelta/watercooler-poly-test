@@ -27,7 +27,7 @@ export function StatusBadge({ market, className }: { market: MarketSummary; clas
   }
   const winner = market.outcomes.find((o) => o.id === market.resolvedOutcomeId);
   return (
-    <span className={clsx('inline-flex items-center gap-1 text-xs font-medium text-brand-2', className)}>
+    <span className={clsx('inline-flex items-center gap-1 text-xs font-medium text-brand', className)}>
       <CheckCircle2 className="size-3.5" /> 已结算{winner ? ` · ${winner.label}` : ''}
     </span>
   );

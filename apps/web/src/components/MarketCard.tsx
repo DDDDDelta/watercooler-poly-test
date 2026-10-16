@@ -19,7 +19,7 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
   const yesNoLabels = market.isBinary && market.outcomes[0]?.label === '是';
 
   return (
-    <article className="glass glow-border group relative flex flex-col rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/[0.04] hover:shadow-[0_20px_50px_-20px_rgb(139_92_246/0.45)]">
+    <article className="glass glow-border group relative flex flex-col rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/[0.04] hover:shadow-[0_20px_50px_-20px_rgb(0_0_0/0.9)]">
       {!preview && <Link to={href} className="absolute inset-0 z-[1] rounded-2xl" aria-label={market.question} />}
       <div className="flex items-start gap-3">
         <CategoryIcon category={market.category} size={40} />

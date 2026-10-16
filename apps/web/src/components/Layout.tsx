@@ -26,18 +26,16 @@ import { buttonClass } from './ui';
 export function Logo() {
   return (
     <Link to="/" className="group flex items-center gap-2.5">
-      <span className="relative flex size-9 items-center justify-center rounded-xl border border-line-strong bg-panel">
-        <span className="absolute inset-0 rounded-xl bg-aurora opacity-0 blur-md transition-opacity group-hover:opacity-50" />
-        <svg viewBox="0 0 32 32" className="relative size-6">
-          <defs>
-            <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#22d3ee" />
-              <stop offset=".55" stopColor="#8b5cf6" />
-              <stop offset="1" stopColor="#ec4899" />
-            </linearGradient>
-          </defs>
-          <path d="M16 3c4.8 5.7 8.6 10.4 8.6 14.9a8.6 8.6 0 0 1-17.2 0C7.4 13.4 11.2 8.7 16 3Z" fill="url(#logo-g)" />
-          <path d="M12.3 19a3.9 3.9 0 0 0 3.7 3.7" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <span className="relative flex size-9 items-center justify-center rounded-xl border border-line-strong bg-panel transition group-hover:border-brand/50">
+        <svg viewBox="0 0 32 32" className="size-6 text-brand">
+          <path d="M16 3c4.8 5.7 8.6 10.4 8.6 14.9a8.6 8.6 0 0 1-17.2 0C7.4 13.4 11.2 8.7 16 3Z" fill="currentColor" />
+          <path
+            d="M12.3 19a3.9 3.9 0 0 0 3.7 3.7"
+            stroke="#05060c"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            fill="none"
+          />
         </svg>
       </span>
       <span className="hidden leading-none sm:block">
@@ -60,9 +58,7 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
       {({ isActive }) => (
         <>
           {children}
-          {isActive && (
-            <span className="absolute inset-x-3 -bottom-[17px] h-0.5 rounded-full bg-aurora shadow-[0_0_12px_rgb(139_92_246)]" />
-          )}
+          {isActive && <span className="absolute inset-x-3 -bottom-[17px] h-0.5 rounded-full bg-brand" />}
         </>
       )}
     </NavLink>
@@ -184,7 +180,7 @@ function Navbar() {
               {me.canClaimBonus && <BonusButton />}
               <Link
                 to="/portfolio"
-                className="flex h-9 items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 text-sm font-semibold transition hover:border-brand-2/40"
+                className="flex h-9 items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 text-sm font-semibold transition hover:border-brand/40"
                 title="余额"
               >
                 <Money value={me.balance} />
@@ -272,7 +268,7 @@ function MobileNav() {
             }
           >
             {primary ? (
-              <span className="-mt-1 flex size-9 items-center justify-center rounded-xl bg-aurora text-white shadow-[0_0_20px_-4px_rgb(139_92_246)]">
+              <span className="-mt-1 flex size-9 items-center justify-center rounded-xl bg-brand text-canvas">
                 <Icon className="size-5" />
               </span>
             ) : (
@@ -289,9 +285,7 @@ function MobileNav() {
 function Background() {
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-      <div className="absolute -top-[30%] -left-[10%] h-[70vh] w-[60vw] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(139_92_246/0.22),transparent)] blur-2xl" />
-      <div className="absolute top-[10%] -right-[15%] h-[60vh] w-[55vw] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(34_211_238/0.14),transparent)] blur-2xl [animation-delay:-8s]" />
-      <div className="absolute -bottom-[30%] left-[20%] h-[60vh] w-[60vw] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(236_72_153/0.10),transparent)] blur-2xl [animation-delay:-16s]" />
+      <div className="absolute -top-[45%] left-1/2 h-[70vh] w-[80vw] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(255_122_26/0.06),transparent)]" />
       <div
         className="absolute inset-0 opacity-[0.35]"
         style={{

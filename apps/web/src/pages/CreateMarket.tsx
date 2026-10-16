@@ -163,9 +163,7 @@ export default function CreateMarket() {
                   onClick={() => setKind(value)}
                   className={clsx(
                     'rounded-xl border p-4 text-left transition',
-                    kind === value
-                      ? 'border-brand-2/60 bg-brand-2/10 shadow-[0_0_24px_-10px_var(--color-brand-2)]'
-                      : 'border-line hover:bg-white/[0.03]',
+                    kind === value ? 'border-brand/60 bg-brand/10' : 'border-line hover:bg-white/[0.03]',
                   )}
                 >
                   <div className="font-semibold">{title}</div>
@@ -184,7 +182,7 @@ export default function CreateMarket() {
                 step={5}
                 value={initial}
                 onChange={(e) => setInitial(Number(e.target.value))}
-                className="w-full accent-[var(--color-brand-2)]"
+                className="w-full accent-[var(--color-brand)]"
               />
             </Field>
           ) : (

@@ -29,10 +29,6 @@ function FeaturedMarket({ market }: { market: MarketSummary }) {
 
   return (
     <Card className="glow-border relative flex h-full flex-col overflow-hidden p-5">
-      <div
-        className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full opacity-25 blur-3xl"
-        style={{ background: color }}
-      />
       <div className="relative flex items-center gap-2 text-xs font-medium text-gold">
         <Flame className="size-3.5" /> 今日最热
       </div>
@@ -112,7 +108,7 @@ function Hero() {
         <h1 className="mt-5 font-display text-4xl leading-[1.1] font-bold tracking-tight sm:text-5xl lg:text-6xl">
           把茶水间的八卦
           <br />
-          变成<span className="text-aurora">概率</span>
+          变成<span className="text-brand">概率</span>
         </h1>
         <p className="mt-5 max-w-lg text-base leading-relaxed text-dim">
           团建去哪、周会多久、指数收在几点……用{CURRENCY_NAME}押注你的判断。价格就是大家的集体预期，猜对了，
@@ -230,7 +226,7 @@ function MarketBrowser() {
                 update('q', e.target.value.trim());
               }}
               placeholder="搜索市场"
-              className="h-9 w-full rounded-xl border border-line bg-white/[0.03] pr-3 pl-9 text-sm outline-none placeholder:text-faint focus:border-brand-2/60"
+              className="h-9 w-full rounded-xl border border-line bg-white/[0.03] pr-3 pl-9 text-sm outline-none placeholder:text-faint focus:border-brand/60"
             />
           </div>
           <Segmented
@@ -242,7 +238,7 @@ function MarketBrowser() {
           <select
             value={sort}
             onChange={(e) => update('sort', e.target.value === 'trending' ? '' : e.target.value)}
-            className="h-9 rounded-xl border border-line bg-panel px-3 text-sm text-dim outline-none focus:border-brand-2/60"
+            className="h-9 rounded-xl border border-line bg-panel px-3 text-sm text-dim outline-none focus:border-brand/60"
             aria-label="排序"
           >
             {SORTS.map((s) => (

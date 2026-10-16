@@ -13,7 +13,7 @@ type Variant = 'primary' | 'ghost' | 'outline' | 'yes' | 'no' | 'danger';
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-aurora text-white shadow-[0_0_24px_-6px_rgb(139_92_246/0.8)] hover:shadow-[0_0_32px_-4px_rgb(139_92_246/0.9)] hover:brightness-110',
+    'bg-brand font-semibold text-canvas shadow-[0_0_24px_-10px_rgb(255_122_26/0.8)] hover:bg-[#ff8d3a] hover:shadow-[0_0_28px_-8px_rgb(255_122_26/0.9)]',
   ghost: 'text-dim hover:text-fg hover:bg-white/5',
   outline: 'border border-line-strong text-fg hover:bg-white/5 hover:border-white/25',
   yes: 'bg-yes text-canvas hover:brightness-110 shadow-[0_0_24px_-8px_var(--color-yes)]',
@@ -31,7 +31,10 @@ export function buttonClass({
 }: { variant?: Variant; size?: Size; className?: string } = {}) {
   return clsx(
     'inline-flex items-center justify-center gap-2 rounded-xl font-medium whitespace-nowrap transition-all duration-200 select-none',
-    'disabled:pointer-events-none disabled:opacity-45 active:scale-[0.98]',
+    'disabled:pointer-events-none active:scale-[0.98]',
+    variant === 'primary' || variant === 'yes' || variant === 'no'
+      ? 'disabled:bg-white/[0.07] disabled:text-faint disabled:shadow-none'
+      : 'disabled:opacity-45',
     size === 'sm' && 'h-8 px-3 text-sm',
     size === 'md' && 'h-10 px-4 text-sm',
     size === 'lg' && 'h-12 px-6 text-base',
@@ -58,7 +61,7 @@ export function Button({
 }
 
 const fieldClass =
-  'w-full rounded-xl border border-line bg-white/[0.03] px-3.5 text-fg placeholder:text-faint transition-colors outline-none focus:border-brand-2/60 focus:bg-white/[0.05] focus:shadow-[0_0_0_3px_rgb(34_211_238/0.12)]';
+  'w-full rounded-xl border border-line bg-white/[0.03] px-3.5 text-fg placeholder:text-faint transition-colors outline-none focus:border-brand/60 focus:bg-white/[0.05] focus:shadow-[0_0_0_3px_rgb(255_122_26/0.14)]';
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={clsx(fieldClass, 'h-11', className)} {...rest} />;
