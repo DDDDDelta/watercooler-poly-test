@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Everything visual hangs off these, so re-skinning the site
+ * (e.g. to company colours) is a matter of editing this block.
+ */
+@theme {
+  --font-sans: 'Inter Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --color-canvas: #05060c;
+  --color-panel: #0b0d18;
+  --color-raised: #141829;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.14);
+  --color-fg: #eceefa;
+  --color-dim: #9096b2;
+  --color-faint: #5d6385;
+
+  --color-yes: #19e3a1;
+  --color-no: #ff4f7b;
+  --color-brand: #8b5cf6;
+  --color-brand-2: #22d3ee;
+  --color-brand-3: #ec4899;
+  --color-gold: #fbbf24;
+
+  --animate-marquee: marquee var(--marquee-duration, 60s) linear infinite;
+  --animate-drift: drift 24s ease-in-out infinite alternate;
+  --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes drift {
+    0% {
+      transform: translate3d(-4%, -2%, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(3%, 4%, 0) scale(1.08);
+    }
+    100% {
+      transform: translate3d(-2%, 6%, 0) scale(0.96);
+    }
+  }
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgb(25 227 161 / 0.55);
+    }
+    100% {
+      box-shadow: 0 0 0 10px rgb(25 227 161 / 0);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-canvas);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-canvas font-sans text-fg antialiased;
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: rgb(139 92 246 / 0.45);
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-2);
+    outline-offset: 2px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+  }
+}
+
+/* Glass card with a hairline border. */
+@utility glass {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.015));
+  border: 1px solid var(--color-line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Animated aurora gradient text. */
+@utility text-aurora {
+  background-image: linear-gradient(100deg, #22d3ee 0%, #8b5cf6 45%, #ec4899 80%, #22d3ee 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-aurora {
+  background-image: linear-gradient(115deg, #22d3ee, #8b5cf6 50%, #ec4899);
+}
+
+/* 1px gradient border that lights up on hover (pair with `relative`). */
+@utility glow-border {
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(140deg, rgb(34 211 238 / 0.7), rgb(139 92 246 / 0.5) 40%, transparent 70%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

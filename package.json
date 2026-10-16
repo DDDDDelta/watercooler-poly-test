@@ -1,0 +1,23 @@
+{
+  "name": "watercooler",
+  "private": true,
+  "description": "茶水间预测市场 —— 给同事们玩的 Polymarket 风格预测市场",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @watercooler/server --filter @watercooler/web dev",
+    "build": "pnpm --filter @watercooler/web build && pnpm --filter @watercooler/server build",
+    "start": "pnpm --filter @watercooler/server start",
+    "seed": "pnpm --filter @watercooler/server seed",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}
