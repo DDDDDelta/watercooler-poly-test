@@ -60,7 +60,9 @@ export function TradePanel({
   const position = positions.find((p) => p.outcomeId === outcome.id);
   const q = market.outcomes.map((o) => o.shares);
 
-  useEffect(() => setShares(''), [outcomeId, side]);
+  useEffect(() => {
+    setShares('');
+  }, [outcomeId, side]);
 
   const amountNum = Number(amount);
   const sharesNum = Number(shares);

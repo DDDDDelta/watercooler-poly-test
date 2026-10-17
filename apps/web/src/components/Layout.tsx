@@ -98,7 +98,9 @@ function UserMenu() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -304,7 +306,9 @@ export function Layout() {
   const { pathname } = useLocation();
   const { me, loading } = useMe();
   const config = useConfig();
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   if (config?.privateMode && !loading && !me && pathname !== '/login' && pathname !== '/register') {
     return <Navigate to={`/login?next=${encodeURIComponent(pathname)}`} replace />;
   }

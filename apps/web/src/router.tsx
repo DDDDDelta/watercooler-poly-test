@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router';
 import { Layout } from './components/Layout';
 import { RequireAuth } from './components/RequireAuth';
+import { RouteError } from './components/RouteError';
 import Admin from './pages/Admin';
 import CreateMarket from './pages/CreateMarket';
 import Home from './pages/Home';
@@ -16,6 +17,7 @@ export const router = createBrowserRouter(
   [
     {
       element: <Layout />,
+      errorElement: <RouteError />,
       children: [
         { path: '/', element: <Home /> },
         { path: '/market/:id', element: <Market /> },

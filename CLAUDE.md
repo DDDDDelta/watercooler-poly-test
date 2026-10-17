@@ -21,5 +21,6 @@ Polymarket-style play-money prediction market for coworkers. UI copy is Chinese;
 - Schema changes: append a new entry to `apps/server/src/db/migrations.ts`; never edit shipped ones.
 - Mutating endpoints are POST with a JSON body (CSRF guard in `app.ts`).
 - Trade previews in the browser must use the same `quoteBuy`/`quoteSell` the server executes.
+- `useEffect` callbacks use block bodies and only ever return a cleanup function: `useEffect(() => x(), …)` returns `x()`'s value, which React later calls as the cleanup (this crashed production when a browser's `window.scrollTo` returned a value).
 - The app may be served under a sub-path (`BASE_PATH`, e.g. `/watercooler` in production). Never hard-code root-relative URLs in the web app: use router links/`navigate()` (router has a `basename`) and `import.meta.env.BASE_URL` for anything else.
 - Deployment: `.github/workflows/deploy.yml` + `deploy/` (remote activation script, `watercooler.sh` start/stop/restart script, setup guide).
