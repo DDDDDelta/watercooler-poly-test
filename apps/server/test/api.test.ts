@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { normalizeBasePath } from '../src/config';
 import { setup } from './helpers';
 
 const HOUR = 3_600_000;
@@ -83,6 +84,19 @@ describe('auth', () => {
     expect((await anon.get('/auth/me')).body.user).toBeNull();
     const alice = await env.register('alice');
     expect((await alice.get('/markets')).status).toBe(200);
+  });
+
+  it('scopes the session cookie to BASE_PATH', async () => {
+    const register = (env: ReturnType<typeof setup>) =>
+      env.app.request('http://localhost/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'amy', displayName: 'Amy', password: 'secret123' }),
+      });
+    const sub = await register(setup({ basePath: normalizeBasePath('/watercooler/') }));
+    expect(sub.headers.get('set-cookie')).toContain('Path=/watercooler;');
+    const root = await register(setup());
+    expect(root.headers.get('set-cookie')).toContain('Path=/;');
   });
 
   it('daily bonus can be claimed once per day', async () => {

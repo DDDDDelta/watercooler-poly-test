@@ -19,6 +19,7 @@ export function authRoutes({ db, config, now }: AppDeps) {
   const app = new Hono<AppEnv>();
   const loginFailures = new RateLimiter(10, 15 * MINUTE);
   const registrations = new RateLimiter(20, 60 * MINUTE);
+  const cookiePath = config.basePath || '/';
 
   app.get('/config', (c) =>
     c.json<AppConfig>({
@@ -43,7 +44,7 @@ export function authRoutes({ db, config, now }: AppDeps) {
     registrations.hit(ip);
     const t = now();
     const user = await createUser(db, config, input, t);
-    startSession(c, db, user.id, t);
+    startSession(c, db, cookiePath, user.id, t);
     return c.json({ user: toMe(user, config, t) }, 201);
   });
 
@@ -60,12 +61,12 @@ export function authRoutes({ db, config, now }: AppDeps) {
     }
     loginFailures.reset(key);
     const t = now();
-    startSession(c, db, user.id, t);
+    startSession(c, db, cookiePath, user.id, t);
     return c.json({ user: toMe(user, config, t) });
   });
 
   app.post('/auth/logout', (c) => {
-    endSession(c, db);
+    endSession(c, db, cookiePath);
     return c.json({ ok: true });
   });
 

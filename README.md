@@ -56,6 +56,10 @@ pnpm dev         # 前端 http://localhost:5173 ，API http://localhost:3000
 
 ## 部署
 
+### GitHub Actions 自动部署
+
+推送到 `main` 后自动构建、测试并通过 SSH 部署到服务器（systemd + nginx 反向代理，支持部署在子路径下，失败自动回滚）。服务器一次性准备和需要配置的 Secrets 见 [`deploy/README.md`](deploy/README.md)。
+
 ### 直接运行
 
 ```bash
@@ -89,17 +93,19 @@ sqlite3 data/watercooler.db ".backup 'backup-$(date +%F).db'"
 
 通过环境变量或仓库根目录的 `.env` 文件配置，全部可选，详见 [`.env.example`](.env.example)：
 
-| 变量                 | 默认值                | 说明                                   |
-| -------------------- | --------------------- | -------------------------------------- |
-| `PORT`               | `3000`                | 服务端口                               |
-| `DATABASE_PATH`      | `data/watercooler.db` | SQLite 文件路径                        |
-| `INVITE_CODE`        | 无                    | 设置后注册必须填写邀请码               |
-| `STARTING_BALANCE`   | `1000`                | 注册赠送水滴                           |
-| `DAILY_BONUS`        | `100`                 | 每日签到奖励，`0` 关闭                 |
-| `ADMIN_USERNAMES`    | 无                    | 注册后自动成为管理员的用户名，逗号分隔 |
-| `ALLOW_USER_MARKETS` | `true`                | 普通用户能否创建市场                   |
-| `PRIVATE_MODE`       | `false`               | 开启后必须登录才能看到任何内容         |
-| `APP_TIMEZONE`       | `Asia/Shanghai`       | 每日签到按哪个时区算「今天」           |
+| 变量                 | 默认值                | 说明                                                                    |
+| -------------------- | --------------------- | ----------------------------------------------------------------------- |
+| `HOST`               | `0.0.0.0`             | 监听地址，放在 nginx 后面时设为 `127.0.0.1`                             |
+| `PORT`               | `3000`                | 服务端口                                                                |
+| `BASE_PATH`          | 无（站点根目录）      | 部署在子路径下时设置，如 `/watercooler`；**构建前端和运行服务时都要设** |
+| `DATABASE_PATH`      | `data/watercooler.db` | SQLite 文件路径                                                         |
+| `INVITE_CODE`        | 无                    | 设置后注册必须填写邀请码                                                |
+| `STARTING_BALANCE`   | `1000`                | 注册赠送水滴                                                            |
+| `DAILY_BONUS`        | `100`                 | 每日签到奖励，`0` 关闭                                                  |
+| `ADMIN_USERNAMES`    | 无                    | 注册后自动成为管理员的用户名，逗号分隔                                  |
+| `ALLOW_USER_MARKETS` | `true`                | 普通用户能否创建市场                                                    |
+| `PRIVATE_MODE`       | `false`               | 开启后必须登录才能看到任何内容                                          |
+| `APP_TIMEZONE`       | `Asia/Shanghai`       | 每日签到按哪个时区算「今天」                                            |
 
 ## 玩法说明
 

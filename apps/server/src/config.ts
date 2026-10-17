@@ -26,6 +26,11 @@ export interface Config {
   timezone: string;
   /** Built web app to serve, or null to run API-only. */
   staticDir: string | null;
+  /**
+   * Public URL prefix when served under a sub-path behind a reverse proxy (e.g. "/watercooler"),
+   * or "" at the site root. The proxy strips it before forwarding; we only need it to scope cookies.
+   */
+  basePath: string;
 }
 
 /** Load `.env` from the repo root or the current directory if present. */
@@ -43,6 +48,12 @@ function num(value: string | undefined, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) throw new Error(`Invalid number in environment: ${value}`);
   return n;
+}
+
+/** "/watercooler/", "watercooler" -> "/watercooler"; "/" or empty -> "". */
+export function normalizeBasePath(value: string | undefined): string {
+  const trimmed = (value ?? '').trim().replace(/^\/+|\/+$/g, '');
+  return trimmed ? `/${trimmed}` : '';
 }
 
 function bool(value: string | undefined, fallback: boolean): boolean {
@@ -68,5 +79,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     privateMode: bool(env.PRIVATE_MODE, false),
     timezone: env.APP_TIMEZONE || 'Asia/Shanghai',
     staticDir,
+    basePath: normalizeBasePath(env.BASE_PATH),
   };
 }

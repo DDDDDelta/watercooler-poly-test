@@ -31,7 +31,7 @@ export function createApp(deps: AppDeps) {
   });
 
   api.use('*', async (c, next) => {
-    c.set('user', loadSessionUser(c, deps.db, deps.now()));
+    c.set('user', loadSessionUser(c, deps.db, deps.config.basePath || '/', deps.now()));
     if (deps.config.privateMode && !c.get('user') && !PUBLIC_IN_PRIVATE_MODE.has(c.req.path)) {
       return c.json({ error: '请先登录' }, 401);
     }

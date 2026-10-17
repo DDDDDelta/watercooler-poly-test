@@ -14,7 +14,17 @@ function isHttps(c: Context): boolean {
   return new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto') === 'https';
 }
 
-export function startSession(c: Context, db: DB, userId: number, now: number): void {
+function setSessionCookie(c: Context, token: string, cookiePath: string): void {
+  setCookie(c, COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: isHttps(c),
+    path: cookiePath,
+    maxAge: SESSION_TTL / 1000,
+  });
+}
+
+export function startSession(c: Context, db: DB, cookiePath: string, userId: number, now: number): void {
   const token = randomBytes(32).toString('base64url');
   db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
     hashToken(token),
@@ -24,17 +34,11 @@ export function startSession(c: Context, db: DB, userId: number, now: number): v
   );
   // Opportunistic cleanup of expired sessions.
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
-  setCookie(c, COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    secure: isHttps(c),
-    path: '/',
-    maxAge: SESSION_TTL / 1000,
-  });
+  setSessionCookie(c, token, cookiePath);
 }
 
 /** Resolve the session cookie to a user, sliding the expiry forward when it is half used. */
-export function loadSessionUser(c: Context, db: DB, now: number): UserRow | null {
+export function loadSessionUser(c: Context, db: DB, cookiePath: string, now: number): UserRow | null {
   const token = getCookie(c, COOKIE_NAME);
   if (!token) return null;
   const tokenHash = hashToken(token);
@@ -48,22 +52,16 @@ export function loadSessionUser(c: Context, db: DB, now: number): UserRow | null
   if (!row) return null;
   if (row.session_expires_at - now < SESSION_TTL / 2) {
     db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(now + SESSION_TTL, tokenHash);
-    setCookie(c, COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: isHttps(c),
-      path: '/',
-      maxAge: SESSION_TTL / 1000,
-    });
+    setSessionCookie(c, token, cookiePath);
   }
   const { session_expires_at: _, ...user } = row;
   return user;
 }
 
-export function endSession(c: Context, db: DB): void {
+export function endSession(c: Context, db: DB, cookiePath: string): void {
   const token = getCookie(c, COOKIE_NAME);
   if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
-  deleteCookie(c, COOKIE_NAME, { path: '/' });
+  deleteCookie(c, COOKIE_NAME, { path: cookiePath });
 }
 
 /** Log a user out everywhere except, optionally, the current session. */

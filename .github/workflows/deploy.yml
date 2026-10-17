@@ -1,0 +1,104 @@
+name: Deploy
+
+# Builds on GitHub, uploads the build to the server over SSH and activates it with
+# deploy/remote-deploy.sh. One-time server setup and the secrets are described in deploy/README.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      # URL prefix the site is served under; nginx strips it before proxying to the app.
+      BASE_PATH: ${{ vars.BASE_PATH || '/watercooler' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/watercooler' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Build (base path ${{ env.BASE_PATH }})
+        run: pnpm build
+
+      - name: Package release
+        run: |
+          RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          echo "RELEASE=$RELEASE" >> "$GITHUB_ENV"
+          tar -czf release.tgz \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml \
+            apps/server/package.json apps/server/dist \
+            apps/web/package.json apps/web/dist \
+            packages/shared/package.json
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name is not set (see deploy/README.md)"
+              exit 1
+            fi
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<CONFIG
+          Host server
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          CONFIG
+
+      - name: Upload release
+        run: |
+          # shellcheck disable=SC2029 # expanding on the runner is intended
+          ssh server "mkdir -p '$DEPLOY_PATH/releases'"
+          scp -q release.tgz "server:$DEPLOY_PATH/releases/$RELEASE.tgz"
+
+      - name: Activate release
+        run: |
+          # shellcheck disable=SC2029 # expanding on the runner is intended
+          ssh server "bash -l -s -- '$DEPLOY_PATH' '$RELEASE'" < deploy/remote-deploy.sh
+
+      - name: Smoke test public URL
+        if: vars.APP_URL != ''
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          prefix="/${BASE_PATH#/}"
+          prefix="${prefix%/}"
+          curl -fsS --retry 5 --retry-delay 3 "${APP_URL%/}/api/config"
+          echo
+          curl -fsS "${APP_URL%/}/" | grep -q "$prefix/assets/" || {
+            echo "::error::index.html does not reference $prefix/assets/ (wrong BASE_PATH?)"
+            exit 1
+          }
