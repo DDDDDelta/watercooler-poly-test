@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 
-const COLORS = ['#ea6a12', '#0f9f8f', '#d63a5a', '#c58a0a', '#2f9e4f', '#2b7fb8', '#6f9a12', '#56637a'];
+const COLORS = ['#1c55fb', '#14c9c9', '#ff7d00', '#f5319d', '#00b42a', '#3491fa', '#f7ba1e', '#86909c'];
 
 /** Deterministic coloured avatar with the user's first character. */
 export function Avatar({
@@ -25,7 +25,6 @@ export function Avatar({
         height: size,
         fontSize: size * 0.42,
         background: COLORS[id % COLORS.length],
-        boxShadow: `0 0 0 1px rgb(255 255 255 / 0.12) inset`,
       }}
       aria-hidden
     >

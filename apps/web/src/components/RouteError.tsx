@@ -13,7 +13,7 @@ export function RouteError() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-canvas px-4 text-center text-fg">
       <AlertTriangle className="size-12 text-gold" />
-      <h1 className="font-display text-2xl font-bold">页面出错了</h1>
+      <h1 className="text-2xl font-semibold">页面出错了</h1>
       <p className="max-w-md text-sm text-dim">刷新一下通常就好了。如果一直出现，把下面这行错误信息发给管理员。</p>
       <code className="max-w-full overflow-x-auto rounded-lg border border-line bg-panel px-3 py-2 text-xs text-faint">
         {detail}

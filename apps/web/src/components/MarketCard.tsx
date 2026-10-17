@@ -19,11 +19,11 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
   const yesNoLabels = market.isBinary && market.outcomes[0]?.label === '是';
 
   return (
-    <article className="glass glow-border group relative flex flex-col rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/[0.04] hover:shadow-[0_20px_50px_-20px_rgb(0_0_0/0.9)]">
-      {!preview && <Link to={href} className="absolute inset-0 z-[1] rounded-2xl" aria-label={market.question} />}
+    <article className="surface card-hover group relative flex flex-col rounded-lg p-5">
+      {!preview && <Link to={href} className="absolute inset-0 z-[1] rounded-lg" aria-label={market.question} />}
       <div className="flex items-start gap-3">
         <CategoryIcon category={market.category} size={40} />
-        <h3 className="line-clamp-2 min-h-[2.75rem] flex-1 text-[15px] leading-snug font-medium text-fg/95 group-hover:text-fg">
+        <h3 className="line-clamp-2 min-h-[2.75rem] flex-1 text-[15px] leading-snug font-semibold text-fg transition-colors group-hover:text-brand">
           {market.question}
         </h3>
         {market.isBinary && market.outcomes[0] && (
@@ -53,15 +53,15 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
                   disabled={!live || preview}
                   onClick={() => navigate(`${href}?outcome=${o.id}`)}
                   className={clsx(
-                    'relative z-10 flex h-10 items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-all',
+                    'relative z-10 flex h-9 items-center justify-between rounded px-3 text-sm font-semibold transition-colors',
                     'disabled:pointer-events-none disabled:opacity-60',
                     i === 0
-                      ? 'border-yes/25 bg-yes/10 text-yes hover:bg-yes hover:text-canvas hover:shadow-[0_0_20px_-4px_var(--color-yes)]'
-                      : 'border-no/25 bg-no/10 text-no hover:bg-no hover:text-white hover:shadow-[0_0_20px_-4px_var(--color-no)]',
+                      ? 'bg-yes/8 text-yes hover:bg-yes hover:text-white'
+                      : 'bg-no/8 text-no hover:bg-no hover:text-white',
                   )}
                 >
                   <span className="truncate">{o.label}</span>
-                  <span className="font-mono text-xs tabular opacity-80">{formatPct(o.probability)}</span>
+                  <span className="font-mono text-xs">{formatPct(o.probability)}</span>
                 </button>
               ))}
             </div>
@@ -69,9 +69,9 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
         ) : (
           <ul className="space-y-1.5">
             {sorted.slice(0, 3).map((o) => (
-              <li key={o.id} className="relative overflow-hidden rounded-lg px-2.5 py-1.5 text-sm">
+              <li key={o.id} className="relative overflow-hidden rounded px-2.5 py-1.5 text-sm">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-lg opacity-20 transition-all duration-500"
+                  className="absolute inset-y-0 left-0 rounded opacity-[0.12] transition-all duration-500"
                   style={{ width: `${o.probability * 100}%`, background: outcomeColor(o.index, false) }}
                 />
                 <div className="relative flex items-center justify-between gap-2">
@@ -80,9 +80,9 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
                       className="size-2 shrink-0 rounded-full"
                       style={{ background: outcomeColor(o.index, false) }}
                     />
-                    <span className="truncate text-fg/90">{o.label}</span>
+                    <span className="truncate text-fg">{o.label}</span>
                   </span>
-                  <span className="font-mono text-xs font-semibold tabular">{formatPct(o.probability)}</span>
+                  <span className="font-mono text-xs font-semibold">{formatPct(o.probability)}</span>
                 </div>
               </li>
             ))}
@@ -120,17 +120,17 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
 
 export function MarketCardSkeleton() {
   return (
-    <div className="glass h-[188px] animate-pulse rounded-2xl p-4">
+    <div className="surface h-[196px] animate-pulse rounded-lg p-5">
       <div className="flex gap-3">
-        <div className="size-10 rounded-xl bg-white/5" />
+        <div className="size-10 rounded-md bg-fill" />
         <div className="flex-1 space-y-2">
-          <div className="h-3.5 w-full rounded bg-white/5" />
-          <div className="h-3.5 w-2/3 rounded bg-white/5" />
+          <div className="h-3.5 w-full rounded bg-fill" />
+          <div className="h-3.5 w-2/3 rounded bg-fill" />
         </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-2">
-        <div className="h-10 rounded-xl bg-white/5" />
-        <div className="h-10 rounded-xl bg-white/5" />
+        <div className="h-9 rounded bg-fill" />
+        <div className="h-9 rounded bg-fill" />
       </div>
     </div>
   );

@@ -41,12 +41,7 @@ function ChartCard({ market }: { market: MarketDetail }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         {market.isBinary ? (
           <div className="flex items-end gap-3">
-            <span
-              className="font-display text-5xl font-bold tabular"
-              style={{ color: outcomeColor(0, true), textShadow: `0 0 30px ${outcomeColor(0, true)}55` }}
-            >
-              {formatPct(lead.probability)}
-            </span>
+            <span className="font-mono text-5xl font-bold text-brand">{formatPct(lead.probability)}</span>
             <span className="pb-2 text-sm text-dim">{lead.label === '是' ? '概率' : lead.label}</span>
             {lead.change24h !== null && Math.abs(lead.change24h) >= 0.001 && (
               <span className={clsx('pb-2 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
@@ -117,7 +112,7 @@ function OutcomeTable({
             key={o.id}
             className={clsx(
               'relative grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-line px-5 py-3.5 transition last:border-0',
-              selected === o.id ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]',
+              selected === o.id ? 'bg-fill' : 'hover:bg-raised',
             )}
           >
             <div
@@ -125,7 +120,7 @@ function OutcomeTable({
               style={{ width: `${o.probability * 100}%`, background: c }}
             />
             <div className="relative flex min-w-0 items-center gap-3">
-              <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: c, boxShadow: `0 0 10px ${c}` }} />
+              <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: c }} />
               <span className="truncate font-medium">{o.label}</span>
               {isWinner && <Crown className="size-4 shrink-0 text-gold" />}
               {o.change24h !== null && Math.abs(o.change24h) >= 0.005 && (
@@ -135,9 +130,7 @@ function OutcomeTable({
                 </span>
               )}
             </div>
-            <span className="relative w-20 text-right font-display text-xl font-semibold tabular">
-              {formatPct(o.probability)}
-            </span>
+            <span className="relative w-20 text-right font-mono text-xl font-semibold">{formatPct(o.probability)}</span>
             <div className="relative w-20 text-right">
               {market.status === 'open' && (
                 <button
@@ -162,10 +155,10 @@ function ResolutionBanner({ market }: { market: MarketDetail }) {
   const styles = {
     closed: 'border-gold/30 bg-gold/[0.07] text-gold',
     resolved: 'border-brand/30 bg-brand/[0.07] text-brand',
-    cancelled: 'border-line-strong bg-white/[0.03] text-dim',
+    cancelled: 'border-line-strong bg-fill text-dim',
   }[market.status];
   return (
-    <div className={clsx('flex items-start gap-3 rounded-2xl border p-4', styles)}>
+    <div className={clsx('flex items-start gap-3 rounded-lg border p-4', styles)}>
       {market.status === 'resolved' ? (
         <Crown className="mt-0.5 size-5 shrink-0" />
       ) : market.status === 'cancelled' ? (
@@ -237,7 +230,7 @@ function Comments({ marketId }: { marketId: number }) {
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-line p-4 text-center text-sm text-faint">
+        <div className="rounded border border-dashed border-line-strong p-4 text-center text-sm text-faint">
           <Link to="/login" className="text-brand hover:underline">
             登录
           </Link>{' '}
@@ -266,7 +259,7 @@ function Comments({ marketId }: { marketId: number }) {
                   </button>
                 )}
               </div>
-              <p className="mt-1 text-sm leading-relaxed break-words whitespace-pre-wrap text-fg/85">{c.body}</p>
+              <p className="mt-1 text-sm leading-relaxed break-words whitespace-pre-wrap text-fg">{c.body}</p>
             </div>
           </li>
         ))}
@@ -298,7 +291,7 @@ function Holders({ market }: { market: MarketDetail }) {
               <li key={h.user.id}>
                 <Link
                   to={`/u/${h.user.id}`}
-                  className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-white/[0.04]"
+                  className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-raised"
                 >
                   <Avatar id={h.user.id} name={h.user.displayName} size={24} />
                   <span className="flex-1 truncate">{h.user.displayName}</span>
@@ -355,7 +348,7 @@ function MyPosition({ market, positions }: { market: MarketDetail; positions: Ma
           const value = p.shares * o.probability;
           const pnl = value - p.cost;
           return (
-            <div key={p.outcomeId} className="rounded-xl border border-line bg-black/15 p-3">
+            <div key={p.outcomeId} className="rounded bg-raised p-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold" style={{ color: outcomeColor(o.index, market.isBinary) }}>
                   {o.label}
@@ -428,8 +421,8 @@ function AdminPanel({ market }: { market: MarketDetail }) {
                 key={o.id}
                 onClick={() => setOutcomeId(o.id)}
                 className={clsx(
-                  'flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition',
-                  outcomeId === o.id ? 'border-brand bg-brand/10' : 'border-line hover:bg-white/[0.04]',
+                  'flex w-full items-center justify-between rounded border px-4 py-3 text-left text-sm font-medium transition',
+                  outcomeId === o.id ? 'border-brand bg-brand-light text-brand' : 'border-line hover:border-brand',
                 )}
               >
                 {o.label}
@@ -500,7 +493,9 @@ export default function Market() {
               <Badge>{market.category}</Badge>
               <StatusBadge market={market} />
             </div>
-            <h1 className="mt-2 font-display text-2xl leading-tight font-bold sm:text-3xl">{market.question}</h1>
+            <h1 className="mt-2 text-2xl leading-tight font-semibold sm:text-[28px] sm:leading-[1.3]">
+              {market.question}
+            </h1>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-dim">
               <span className="inline-flex items-center gap-1.5">
                 <Money value={market.volume} /> 成交
@@ -534,7 +529,7 @@ export default function Market() {
           <h2 className="flex items-center gap-2 font-semibold">
             <ScrollText className="size-4 text-brand" /> 结算规则
           </h2>
-          <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg/80">
+          <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg">
             {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由管理员结算。'}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-faint sm:grid-cols-4">
@@ -559,6 +554,7 @@ export default function Market() {
 
         <Card className="p-5">
           <Segmented
+            variant="tabs"
             value={tab}
             onChange={setTab}
             options={[

@@ -32,14 +32,14 @@ export function PositionsTable({ positions, empty }: { positions: PortfolioPosit
             return (
               <tr
                 key={`${p.market.id}-${p.outcomeId}`}
-                className="border-b border-line transition last:border-0 hover:bg-white/[0.02]"
+                className="border-b border-line transition last:border-0 hover:bg-raised"
               >
                 <td className="max-w-[320px] px-5 py-3">
                   <Link to={`/market/${p.market.id}`} className="line-clamp-1 font-medium hover:underline">
                     {p.market.question}
                   </Link>
                   <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-fg/80">{p.outcomeLabel}</span>
+                    <span className="rounded-md bg-fill px-1.5 py-0.5 text-fg">{p.outcomeLabel}</span>
                     <span className={state.className}>{state.text}</span>
                   </div>
                 </td>

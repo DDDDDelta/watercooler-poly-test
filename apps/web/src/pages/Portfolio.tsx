@@ -74,7 +74,7 @@ export default function PortfolioPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-bold">我的持仓</h1>
+      <h1 className="section-title">我的持仓</h1>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="总资产">
           <Money value={stats.netWorth} />
@@ -93,6 +93,7 @@ export default function PortfolioPage() {
       </div>
       <Card className="mt-6 p-5">
         <Segmented
+          variant="tabs"
           value={tab}
           onChange={setTab}
           options={[

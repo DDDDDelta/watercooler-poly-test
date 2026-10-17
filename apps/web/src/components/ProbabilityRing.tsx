@@ -1,7 +1,6 @@
-import { NO_COLOR, YES_COLOR } from '../lib/colors';
 import { formatPct } from '../lib/format';
 
-/** Circular gauge; green above 50%, red below. */
+/** Circular gauge in the brand blue. */
 export function ProbabilityRing({
   value,
   size = 64,
@@ -15,25 +14,30 @@ export function ProbabilityRing({
 }) {
   const r = (size - stroke) / 2 - 2;
   const c = 2 * Math.PI * r;
-  const color = value >= 0.5 ? YES_COLOR : NO_COLOR;
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(255 255 255 / 0.07)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={color}
+          strokeWidth={stroke}
+          style={{ stroke: 'var(--color-fill-2)' }}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={`${c * Math.max(0.005, value)} ${c}`}
-          style={{ transition: 'stroke-dasharray .6s ease' }}
+          style={{ stroke: 'var(--color-brand)', transition: 'stroke-dasharray .6s ease' }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="font-display font-semibold tabular" style={{ fontSize: size * 0.24 }}>
+        <span className="font-mono font-semibold text-fg" style={{ fontSize: size * 0.24 }}>
           {formatPct(value)}
         </span>
         {label && (

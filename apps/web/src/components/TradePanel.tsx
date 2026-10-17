@@ -27,7 +27,7 @@ function Row({ label, children, className }: { label: string; children: React.Re
   return (
     <div className={clsx('flex items-center justify-between gap-3 text-sm', className)}>
       <span className="text-faint">{label}</span>
-      <span className="font-mono tabular text-fg/90">{children}</span>
+      <span className="font-mono tabular text-fg">{children}</span>
     </div>
   );
 }
@@ -135,18 +135,19 @@ export function TradePanel({
   if (!tradable) return <ClosedPanel market={market} />;
 
   return (
-    <Card className="relative overflow-hidden p-5">
-      <div className="relative mb-4 flex items-center gap-1 rounded-xl border border-line bg-white/[0.02] p-1">
+    <Card className="relative overflow-hidden p-5 pt-2">
+      <div className="relative mb-5 flex border-b border-line">
         {(['buy', 'sell'] as const).map((s) => (
           <button
             key={s}
             onClick={() => setSide(s)}
             className={clsx(
-              'flex-1 rounded-lg py-2 text-sm font-semibold transition',
-              side === s ? 'bg-white/10 text-fg' : 'text-dim hover:text-fg',
+              'relative -mb-px flex-1 py-3 text-[15px] transition-colors',
+              side === s ? 'font-semibold text-brand' : 'text-dim hover:text-fg',
             )}
           >
             {s === 'buy' ? '买入' : '卖出'}
+            {side === s && <span className="absolute inset-x-6 bottom-0 h-0.5 bg-brand" />}
           </button>
         ))}
       </div>
@@ -165,15 +166,11 @@ export function TradePanel({
               key={o.id}
               onClick={() => onOutcomeChange(o.id)}
               className={clsx(
-                'flex items-center justify-between gap-2 rounded-xl border px-3.5 text-left font-semibold transition-all',
-                market.isBinary ? 'h-12' : 'h-10 text-sm',
-                selected ? 'text-canvas' : 'border-line bg-white/[0.03] text-fg/85 hover:bg-white/[0.06]',
+                'flex items-center justify-between gap-2 rounded border px-3.5 text-left font-semibold transition-colors',
+                market.isBinary ? 'h-11' : 'h-10 text-sm',
+                selected ? 'text-white' : 'border-line bg-panel text-fg hover:border-brand',
               )}
-              style={
-                selected
-                  ? { background: c, borderColor: c, boxShadow: `0 0 24px -6px ${c}` }
-                  : { borderColor: undefined }
-              }
+              style={selected ? { background: c, borderColor: c } : undefined}
             >
               <span className="flex min-w-0 items-center gap-2">
                 {!market.isBinary && !selected && (
@@ -181,7 +178,7 @@ export function TradePanel({
                 )}
                 <span className="truncate">{o.label}</span>
               </span>
-              <span className="font-mono text-sm tabular opacity-90">{formatPct(o.probability)}</span>
+              <span className="font-mono text-sm">{formatPct(o.probability)}</span>
             </button>
           );
         })}
@@ -190,7 +187,7 @@ export function TradePanel({
       <>
         <div className="relative mt-5">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="font-medium text-dim">{side === 'buy' ? `买入金额（${CURRENCY_NAME}）` : '卖出份额'}</span>
+            <span className="text-fg">{side === 'buy' ? `买入金额（${CURRENCY_NAME}）` : '卖出份额'}</span>
             {me &&
               (side === 'buy' ? (
                 <span className="text-faint">
@@ -210,8 +207,8 @@ export function TradePanel({
               value={side === 'buy' ? amount : shares}
               onChange={(e) => (side === 'buy' ? setAmount(e.target.value) : setShares(e.target.value))}
               className={clsx(
-                'h-14 w-full rounded-xl border border-line bg-black/20 pr-4 text-right font-display text-2xl font-semibold tabular outline-none transition',
-                'placeholder:text-faint focus:border-brand/60 focus:shadow-[0_0_0_3px_rgb(255_122_26/0.14)]',
+                'h-13 w-full rounded border border-line bg-panel pr-4 text-right font-mono text-2xl font-semibold outline-none transition',
+                'placeholder:text-line-strong hover:border-line-strong focus:border-brand focus:shadow-[0_0_0_3px_rgb(28_85_251/0.12)]',
                 side === 'buy' ? 'pl-11' : 'pl-4',
               )}
             />
@@ -228,7 +225,7 @@ export function TradePanel({
                     key={label as string}
                     onClick={fn as () => void}
                     disabled={!me}
-                    className="flex-1 rounded-lg border border-line bg-white/[0.02] py-1.5 text-xs font-medium text-dim transition hover:border-line-strong hover:text-fg disabled:opacity-40"
+                    className="flex-1 rounded border border-line bg-panel py-1.5 text-xs text-dim transition hover:border-brand hover:text-brand disabled:opacity-40"
                   >
                     {label as string}
                   </button>
@@ -241,7 +238,7 @@ export function TradePanel({
                       position &&
                       setShares(String(f === 1 ? position.shares : Math.floor(position.shares * f * 100) / 100))
                     }
-                    className="flex-1 rounded-lg border border-line bg-white/[0.02] py-1.5 text-xs font-medium text-dim transition hover:border-line-strong hover:text-fg disabled:opacity-40"
+                    className="flex-1 rounded border border-line bg-panel py-1.5 text-xs text-dim transition hover:border-brand hover:text-brand disabled:opacity-40"
                   >
                     {f === 1 ? '全部' : `${f * 100}%`}
                   </button>
@@ -249,7 +246,7 @@ export function TradePanel({
           </div>
         </div>
 
-        <div className="relative mt-5 space-y-2 rounded-xl border border-line bg-black/15 p-3.5">
+        <div className="relative mt-5 space-y-2.5 rounded bg-raised p-4">
           {side === 'buy' ? (
             <>
               <Row label="平均价格">{quote ? formatPct1(quote.avgPrice) : '—'}</Row>
@@ -268,13 +265,11 @@ export function TradePanel({
               <div className="flex items-end justify-between">
                 <span className="text-sm text-faint">猜中可得</span>
                 <span className="text-right">
-                  <span className="block font-display text-xl font-semibold text-yes">
+                  <span className="block text-xl font-semibold text-yes">
                     {quote ? <Money value={quote.shares} /> : '—'}
                   </span>
                   {quote && amountNum > 0 && (
-                    <span className="text-xs text-yes/80">
-                      收益 +{((quote.shares / amountNum - 1) * 100).toFixed(1)}%
-                    </span>
+                    <span className="text-xs text-yes">收益 +{((quote.shares / amountNum - 1) * 100).toFixed(1)}%</span>
                   )}
                 </span>
               </div>
@@ -308,9 +303,7 @@ export function TradePanel({
               <div className="my-1 h-px bg-line" />
               <div className="flex items-end justify-between">
                 <span className="text-sm text-faint">预计到手</span>
-                <span className="font-display text-xl font-semibold">
-                  {quote ? <Money value={quote.amount} /> : '—'}
-                </span>
+                <span className="text-xl font-semibold">{quote ? <Money value={quote.amount} /> : '—'}</span>
               </div>
             </>
           )}
@@ -323,9 +316,7 @@ export function TradePanel({
             disabled={!canSubmit}
             loading={mutation.isPending}
             onClick={() => mutation.mutate()}
-            style={
-              canSubmit ? { background: color, color: '#05060c', boxShadow: `0 0 24px -10px ${color}` } : undefined
-            }
+            style={canSubmit ? { background: color, color: '#fff' } : undefined}
           >
             {insufficient
               ? '余额不足'
@@ -361,10 +352,7 @@ function ClosedPanel({ market }: { market: MarketDetail }) {
       <Card className="relative overflow-hidden p-6 text-center">
         <Crown className="relative mx-auto size-8 text-gold" />
         <div className="relative mt-3 text-sm text-dim">最终结果</div>
-        <div
-          className="relative mt-1 font-display text-3xl font-bold"
-          style={{ color: c, textShadow: `0 0 24px ${c}66` }}
-        >
+        <div className="relative mt-1 text-3xl font-bold" style={{ color: c }}>
           {winner.label}
         </div>
         <p className="relative mt-3 text-xs text-faint">

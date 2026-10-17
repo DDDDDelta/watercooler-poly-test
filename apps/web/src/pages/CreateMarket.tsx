@@ -112,7 +112,7 @@ export default function CreateMarket() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="flex items-center gap-2 font-display text-3xl font-bold">
+      <h1 className="flex items-center gap-2 section-title">
         <Sparkles className="size-6 text-brand" /> 发起一个市场
       </h1>
       <p className="mt-2 text-dim">好问题的标准：答案明确、有截止时间、大家都关心。</p>
@@ -138,8 +138,10 @@ export default function CreateMarket() {
                   type="button"
                   onClick={() => setCategory(c)}
                   className={clsx(
-                    'rounded-full border px-3.5 py-1.5 text-sm transition',
-                    category === c ? 'border-brand bg-brand/15 text-fg' : 'border-line text-dim hover:text-fg',
+                    'rounded border px-3.5 py-1.5 text-sm transition',
+                    category === c
+                      ? 'border-brand bg-brand-light text-brand'
+                      : 'border-line text-dim hover:border-brand hover:text-brand',
                   )}
                 >
                   {c}
@@ -162,8 +164,8 @@ export default function CreateMarket() {
                   type="button"
                   onClick={() => setKind(value)}
                   className={clsx(
-                    'rounded-xl border p-4 text-left transition',
-                    kind === value ? 'border-brand/60 bg-brand/10' : 'border-line hover:bg-white/[0.03]',
+                    'rounded-lg border p-4 text-left transition',
+                    kind === value ? 'border-brand bg-brand-light' : 'border-line hover:border-brand',
                   )}
                 >
                   <div className="font-semibold">{title}</div>
@@ -254,8 +256,8 @@ export default function CreateMarket() {
                   type="button"
                   onClick={() => setLiquidity(p.value)}
                   className={clsx(
-                    'rounded-xl border p-3 text-left transition',
-                    liquidity === p.value ? 'border-brand bg-brand/10' : 'border-line hover:bg-white/[0.03]',
+                    'rounded-lg border p-3 text-left transition',
+                    liquidity === p.value ? 'border-brand bg-brand-light' : 'border-line hover:border-brand',
                   )}
                 >
                   <div className="font-semibold">

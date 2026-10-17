@@ -1,19 +1,19 @@
 /** Outcome line/swatch colours for multi-outcome markets. */
 export const OUTCOME_COLORS = [
-  '#ff7a1a',
-  '#2dd4bf',
-  '#facc15',
-  '#f472b6',
-  '#38bdf8',
-  '#a3e635',
-  '#fb7185',
-  '#94a3b8',
-  '#fdba74',
-  '#c4b5fd',
+  '#1c55fb',
+  '#14c9c9',
+  '#ff7d00',
+  '#f5319d',
+  '#7bc616',
+  '#f7ba1e',
+  '#6aa1ff',
+  '#f77234',
+  '#0fa36b',
+  '#86909c',
 ];
 
-export const YES_COLOR = '#19e3a1';
-export const NO_COLOR = '#ff4f7b';
+export const YES_COLOR = '#00b42a';
+export const NO_COLOR = '#f53f3f';
 
 export function outcomeColor(index: number, isBinary: boolean): string {
   if (isBinary) return index === 0 ? YES_COLOR : NO_COLOR;

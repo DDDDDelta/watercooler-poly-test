@@ -23,14 +23,14 @@ export default function Profile() {
     <div>
       <Card className="relative overflow-hidden p-6 sm:p-8">
         <div className="relative flex flex-wrap items-center gap-5">
-          <div className="rounded-full bg-brand p-[3px]">
-            <Avatar id={user.id} name={user.displayName} size={84} className="ring-4 ring-canvas" />
+          <div className="rounded-full bg-brand p-[5px]">
+            <Avatar id={user.id} name={user.displayName} size={84} className="ring-[3px] ring-panel" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="flex items-center gap-2 font-display text-3xl font-bold">
+            <h1 className="flex items-center gap-2 section-title">
               {user.displayName}
               {user.role === 'admin' && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-xs font-medium text-gold">
+                <span className="inline-flex items-center gap-1 rounded bg-gold/10 px-2 py-0.5 text-xs font-normal text-gold">
                   <Shield className="size-3" /> 管理员
                 </span>
               )}
@@ -44,7 +44,7 @@ export default function Profile() {
           </div>
           <div className="text-right">
             <div className="text-xs text-faint">排名</div>
-            <div className="text-brand font-display text-5xl font-bold">#{rank}</div>
+            <div className="font-mono text-5xl font-bold text-brand">#{rank}</div>
           </div>
         </div>
       </Card>
@@ -64,6 +64,7 @@ export default function Profile() {
 
       <Card className="mt-6 p-5">
         <Segmented
+          variant="tabs"
           value={tab}
           onChange={setTab}
           options={[

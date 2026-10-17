@@ -15,6 +15,7 @@
 - **经济系统**：注册送 1000 水滴，每日签到 +100，管理员可手动发放或扣除
 - **管理后台**：待结算市场、用户列表、发放水滴、设置管理员、重置密码
 - **移动端适配**：底部导航栏，交易面板自动排在图表下方
+- **日间 / 黑夜模式**：一键切换，界面风格参照非凸科技官网
 
 ## 技术栈
 
@@ -129,6 +130,8 @@ sqlite3 data/watercooler.db ".backup 'backup-$(date +%F).db'"
 
 默认未登录也能浏览市场、排行榜和个人主页（和 Polymarket 一样，交易需要登录）。如果要放到公网，建议设置 `INVITE_CODE` 和 `PRIVATE_MODE=true`，并在前面加一层 HTTPS 反向代理（Nginx / Caddy）。
 
-## 换皮肤
+## 界面风格与黑夜模式
 
-所有颜色、字体都定义在 [`apps/web/src/index.css`](apps/web/src/index.css) 顶部的 `@theme` 里（`--color-brand`、`--color-yes`、`--color-no` 等），想换成公司配色改这里即可。
+界面参照非凸科技官网（ft.tech）的设计语言：浅色底、品牌蓝 `#1C55FB`、PingFang / 微软雅黑系统字体、4px 小圆角按钮、蓝色下划线标签页。顶栏右侧的太阳/月亮按钮可以切换**黑夜模式**，选择会记在浏览器里，默认是日间模式。
+
+所有颜色都是 [`apps/web/src/index.css`](apps/web/src/index.css) 里的设计变量：日间模式在顶部的 `@theme` 里，黑夜模式在下面的 `html.dark` 里，改配色只需要改这两处。

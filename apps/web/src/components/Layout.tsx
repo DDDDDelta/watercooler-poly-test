@@ -3,12 +3,15 @@ import { CURRENCY_NAME } from '@watercooler/shared';
 import clsx from 'clsx';
 import {
   BarChart3,
+  ChevronUp,
   Gift,
   LayoutGrid,
   LogOut,
+  Moon,
   Plus,
   Settings,
   Shield,
+  Sun,
   Trophy,
   User as UserIcon,
   Wallet,
@@ -19,28 +22,30 @@ import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useConfig, useMe, useSetMe } from '../lib/auth';
 import { formatPct } from '../lib/format';
+import { setTheme, useTheme } from '../lib/theme';
 import { Avatar } from './Avatar';
 import { Money } from './Money';
 import { buttonClass } from './ui';
 
-export function Logo() {
+/** `compact` hides the wordmark on narrow screens (used in the navbar). */
+export function Logo({ compact }: { compact?: boolean }) {
   return (
-    <Link to="/" className="group flex items-center gap-2.5">
-      <span className="relative flex size-9 items-center justify-center rounded-xl border border-line-strong bg-panel transition group-hover:border-brand/50">
-        <svg viewBox="0 0 32 32" className="size-6 text-brand">
+    <Link to="/" className="flex items-center gap-2.5">
+      <span className="flex size-8 items-center justify-center rounded bg-brand">
+        <svg viewBox="0 0 32 32" className="size-5 text-white">
           <path d="M16 3c4.8 5.7 8.6 10.4 8.6 14.9a8.6 8.6 0 0 1-17.2 0C7.4 13.4 11.2 8.7 16 3Z" fill="currentColor" />
           <path
             d="M12.3 19a3.9 3.9 0 0 0 3.7 3.7"
-            stroke="#05060c"
-            strokeWidth="1.8"
+            style={{ stroke: 'var(--color-brand)' }}
+            strokeWidth="2"
             strokeLinecap="round"
             fill="none"
           />
         </svg>
       </span>
-      <span className="hidden leading-none sm:block">
-        <span className="block font-display text-[17px] font-bold tracking-tight">Watercooler</span>
-        <span className="block text-[10px] tracking-[0.3em] text-faint">茶水间预测市场</span>
+      <span className={clsx('leading-none', compact && 'hidden sm:block')}>
+        <span className="block text-[17px] font-bold tracking-tight text-fg">Watercooler</span>
+        <span className="mt-1 block text-[10px] tracking-[0.25em] text-faint">茶水间预测市场</span>
       </span>
     </Link>
   );
@@ -48,8 +53,8 @@ export function Logo() {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   clsx(
-    'relative rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-    isActive ? 'text-fg' : 'text-dim hover:text-fg',
+    'relative flex h-16 items-center px-4 text-[15px] transition-colors',
+    isActive ? 'font-semibold text-brand' : 'text-fg hover:text-brand',
   );
 
 function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
@@ -58,7 +63,7 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
       {({ isActive }) => (
         <>
           {children}
-          {isActive && <span className="absolute inset-x-3 -bottom-[17px] h-0.5 rounded-full bg-brand" />}
+          {isActive && <span className="absolute inset-x-4 bottom-0 h-0.5 bg-brand" />}
         </>
       )}
     </NavLink>
@@ -79,13 +84,28 @@ function BonusButton() {
     <button
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
-      className="relative inline-flex h-9 items-center gap-1.5 rounded-xl border border-gold/30 bg-gold/10 px-2.5 text-sm font-medium text-gold transition hover:bg-gold/20 sm:px-3"
+      className="relative inline-flex h-8 items-center gap-1.5 rounded-full border border-gold/40 bg-gold/5 px-2.5 text-sm text-gold transition hover:bg-gold/10 sm:px-3"
       aria-label="每日签到"
     >
       <span className="absolute -top-1 -right-1 size-2.5 animate-ping rounded-full bg-gold" />
       <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-gold" />
       <Gift className="size-4" />
       <span className="hidden sm:inline">签到</span>
+    </button>
+  );
+}
+
+function ThemeToggle() {
+  const theme = useTheme();
+  const dark = theme === 'dark';
+  return (
+    <button
+      onClick={() => setTheme(dark ? 'light' : 'dark')}
+      className="flex size-8 items-center justify-center rounded-full text-dim transition hover:bg-fill hover:text-brand"
+      aria-label={dark ? '切换到日间模式' : '切换到黑夜模式'}
+      title={dark ? '日间模式' : '黑夜模式'}
+    >
+      {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
     </button>
   );
 }
@@ -129,13 +149,13 @@ function UserMenu() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center rounded-full ring-2 ring-transparent transition hover:ring-white/15"
+        className="flex items-center rounded-full ring-2 ring-transparent transition hover:ring-brand/25"
         aria-label="用户菜单"
       >
         <Avatar id={me.id} name={me.displayName} size={34} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-line-strong bg-panel/95 p-1.5 shadow-2xl backdrop-blur-xl">
+        <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-lg border border-line bg-panel p-1.5 shadow-[0_8px_24px_rgb(29_33_41/0.12)]">
           <div className="px-3 py-2.5">
             <div className="font-medium">{me.displayName}</div>
             <div className="text-xs text-faint">@{me.username}</div>
@@ -145,7 +165,7 @@ function UserMenu() {
             <Link
               key={to}
               to={to}
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-dim transition hover:bg-white/5 hover:text-fg"
+              className="flex items-center gap-2.5 rounded px-3 py-2 text-sm text-dim transition hover:bg-fill hover:text-brand"
             >
               <Icon className="size-4" />
               {label}
@@ -154,7 +174,7 @@ function UserMenu() {
           <div className="my-1 h-px bg-line" />
           <button
             onClick={logout}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-dim transition hover:bg-no/10 hover:text-no"
+            className="flex w-full items-center gap-2.5 rounded px-3 py-2 text-sm text-dim transition hover:bg-no/5 hover:text-no"
           >
             <LogOut className="size-4" />
             退出登录
@@ -168,37 +188,41 @@ function UserMenu() {
 function Navbar() {
   const { me, loading } = useMe();
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-canvas/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4">
-        <Logo />
-        <nav className="hidden items-center gap-1 md:flex">
+    <header className="sticky top-0 z-40 border-b border-line bg-panel/95 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-4">
+        <Logo compact />
+        <nav className="hidden items-center md:flex">
           <NavItem to="/">市场</NavItem>
           <NavItem to="/leaderboard">排行榜</NavItem>
           {me && <NavItem to="/portfolio">持仓</NavItem>}
         </nav>
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
           {loading ? null : me ? (
             <>
               {me.canClaimBonus && <BonusButton />}
               <Link
                 to="/portfolio"
-                className="flex h-9 items-center gap-2 rounded-xl border border-line bg-white/[0.03] px-3 text-sm font-semibold transition hover:border-brand/40"
+                className="flex h-8 items-center gap-2 rounded-full bg-fill px-3.5 text-sm font-semibold transition hover:bg-brand-light hover:text-brand"
                 title="余额"
               >
                 <Money value={me.balance} />
               </Link>
-              <Link to="/create" className={buttonClass({ size: 'sm', className: 'hidden h-9 sm:inline-flex' })}>
-                <Plus className="size-4" />
-                创建市场
-              </Link>
+              {/* The wrapper does the hiding: `hidden` on the link itself would fight its `inline-flex`. */}
+              <div className="hidden sm:block">
+                <Link to="/create" className={buttonClass({ size: 'sm', pill: true })}>
+                  <Plus className="size-4" />
+                  创建市场
+                </Link>
+              </div>
               <UserMenu />
             </>
           ) : (
             <>
-              <Link to="/login" className={buttonClass({ variant: 'ghost', size: 'sm', className: 'h-9' })}>
+              <Link to="/login" className={buttonClass({ variant: 'ghost', size: 'sm', pill: true })}>
                 登录
               </Link>
-              <Link to="/register" className={buttonClass({ size: 'sm', className: 'h-9' })}>
+              <Link to="/register" className={buttonClass({ size: 'sm', pill: true })}>
                 注册
               </Link>
             </>
@@ -219,22 +243,22 @@ function Ticker() {
       to={`/market/${t.marketId}`}
       className="flex shrink-0 items-center gap-2 px-5 text-xs text-dim transition hover:text-fg"
     >
-      <span className="font-medium text-fg/80">{t.user.displayName}</span>
+      <span className="text-fg">{t.user.displayName}</span>
       <span className={t.side === 'buy' ? 'text-yes' : 'text-no'}>{t.side === 'buy' ? '买入' : '卖出'}</span>
-      <span className="rounded bg-white/5 px-1.5 py-0.5 text-fg/80">{t.outcomeLabel}</span>
+      <span className="rounded-sm bg-brand-light px-1.5 py-0.5 text-brand">{t.outcomeLabel}</span>
       <span className="max-w-56 truncate">{t.marketQuestion}</span>
-      <Money value={t.amount} className="font-mono text-fg/80" />
+      <Money value={t.amount} className="font-mono text-fg" />
       <span className="font-mono text-faint">@ {formatPct(t.priceAfter)}</span>
-      <span className="text-line-strong">/</span>
+      <span className="text-line">|</span>
     </Link>
   ));
   return (
     <div
-      className="group relative overflow-hidden border-b border-line bg-panel/40"
+      className="group relative overflow-hidden border-b border-line bg-panel"
       style={{ ['--marquee-duration' as string]: `${Math.max(30, data.length * 5)}s` }}
     >
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-canvas to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-canvas to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-panel to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-panel to-transparent" />
       <div className="flex w-max animate-marquee py-2 group-hover:[animation-play-state:paused]">
         {items}
         <div className="flex" aria-hidden>
@@ -255,7 +279,7 @@ function MobileNav() {
     { to: me ? `/u/${me.id}` : '/login', icon: UserIcon, label: '我的' },
   ];
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       <div className="grid grid-cols-5">
         {items.map(({ to, icon: Icon, label, primary }) => (
           <NavLink
@@ -265,12 +289,12 @@ function MobileNav() {
             className={({ isActive }) =>
               clsx(
                 'flex flex-col items-center gap-0.5 py-2 text-[11px] transition',
-                isActive && !primary ? 'text-fg' : 'text-faint',
+                isActive && !primary ? 'text-brand' : 'text-faint',
               )
             }
           >
             {primary ? (
-              <span className="-mt-1 flex size-9 items-center justify-center rounded-xl bg-brand text-canvas">
+              <span className="-mt-1 flex size-9 items-center justify-center rounded-full bg-brand text-white">
                 <Icon className="size-5" />
               </span>
             ) : (
@@ -284,21 +308,94 @@ function MobileNav() {
   );
 }
 
-function Background() {
+/** Floating buttons on the right edge, like the 联系咨询 dock on ft.tech. */
+function SideDock() {
+  const { me } = useMe();
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-      <div className="absolute -top-[45%] left-1/2 h-[70vh] w-[80vw] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(255_122_26/0.06),transparent)]" />
-      <div
-        className="absolute inset-0 opacity-[0.35]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%)',
-        }}
-      />
+    <div className="fixed right-5 bottom-24 z-30 hidden flex-col items-center gap-3 md:flex">
+      <Link
+        to={me ? '/create' : '/login'}
+        className="flex w-11 flex-col items-center gap-1.5 rounded-full bg-brand py-3 text-white shadow-[0_6px_16px_rgb(28_85_251/0.35)] transition hover:bg-brand-hover"
+      >
+        <Plus className="size-5" />
+        <span className="flex flex-col text-[13px] leading-[1.2]">
+          {Array.from('发起市场').map((ch) => (
+            <span key={ch}>{ch}</span>
+          ))}
+        </span>
+      </Link>
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="flex size-11 items-center justify-center rounded-full border border-line bg-panel text-brand shadow-[0_4px_12px_rgb(29_33_41/0.08)] transition hover:border-brand"
+        aria-label="回到顶部"
+      >
+        <ChevronUp className="size-5" />
+      </button>
     </div>
+  );
+}
+
+function Footer() {
+  const { me } = useMe();
+  const columns = [
+    {
+      title: '市场',
+      links: [
+        { to: '/', label: '全部市场' },
+        { to: '/?sort=closing', label: '即将截止' },
+        { to: '/?status=resolved', label: '已结束' },
+      ],
+    },
+    {
+      title: '社区',
+      links: [
+        { to: '/leaderboard', label: '预言家榜' },
+        { to: me ? '/create' : '/login', label: '发起市场' },
+      ],
+    },
+    {
+      title: '我的',
+      links: me
+        ? [
+            { to: '/portfolio', label: '我的持仓' },
+            { to: '/settings', label: '账号设置' },
+          ]
+        : [
+            { to: '/login', label: '登录' },
+            { to: '/register', label: '注册' },
+          ],
+    },
+  ];
+  return (
+    <footer className="border-t border-line bg-panel pb-20 text-dim md:pb-0">
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 md:flex-row md:justify-between">
+        <div className="max-w-sm">
+          <Logo />
+          <p className="mt-5 text-sm leading-relaxed">
+            茶水间预测市场：用{CURRENCY_NAME}押注同事间的大事小情，价格就是大家的集体预期。
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-10 sm:gap-16">
+          {columns.map((col) => (
+            <div key={col.title}>
+              <div className="text-sm font-semibold text-fg">{col.title}</div>
+              <ul className="mt-4 space-y-3 text-sm">
+                {col.links.map((l) => (
+                  <li key={l.label}>
+                    <Link to={l.to} className="transition hover:text-brand">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="border-t border-line py-5 text-center text-xs text-faint">
+        Watercooler · 仅供同事间娱乐，{CURRENCY_NAME}没有任何现实价值
+      </div>
+    </footer>
   );
 }
 
@@ -314,15 +411,14 @@ export function Layout() {
   }
   return (
     <div className="flex min-h-dvh flex-col">
-      <Background />
       <Navbar />
       <Ticker />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-6 pb-28 md:pb-16">
+      {/* The home page brings its own full-width bands; every other page sits in the content column. */}
+      <main className={clsx('flex-1', pathname !== '/' && 'mx-auto w-full max-w-7xl px-4 pt-8 pb-16')}>
         <Outlet />
       </main>
-      <footer className="hidden border-t border-line py-6 text-center text-xs text-faint md:block">
-        Watercooler · 仅供同事间娱乐，{CURRENCY_NAME}没有任何现实价值
-      </footer>
+      <Footer />
+      <SideDock />
       <MobileNav />
     </div>
   );

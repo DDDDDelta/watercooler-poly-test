@@ -1,27 +1,39 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens. Everything visual hangs off these, so re-skinning the site
- * (e.g. to company colours) is a matter of editing this block.
+ * Design tokens, modelled on the 非凸科技 (ft.tech) visual language: light corporate surfaces,
+ * one strong brand blue and plain Chinese system fonts. 黑夜模式 overrides them further down.
+ * Everything visual hangs off these, so re-skinning the site is a matter of editing this block.
  */
 @theme {
-  --font-sans: 'Inter Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --font-display: 'Space Grotesk Variable', 'Inter Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-sans:
+    'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-sans);
+  /* Numbers use the same family; `.font-mono` only adds tabular figures (see base layer). */
+  --font-mono: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
-  --color-canvas: #05060c;
-  --color-panel: #0b0d18;
-  --color-raised: #141829;
-  --color-line: rgb(255 255 255 / 0.08);
-  --color-line-strong: rgb(255 255 255 / 0.14);
-  --color-fg: #eceefa;
-  --color-dim: #9096b2;
-  --color-faint: #5d6385;
+  /* Surfaces */
+  --color-canvas: #f3f6fb;
+  --color-panel: #ffffff;
+  --color-raised: #f7f8fa;
+  --color-fill: #f2f3f5;
+  --color-fill-2: #e5e6eb;
+  --color-line: #e5e6eb;
+  --color-line-strong: #c9cdd4;
 
-  --color-yes: #19e3a1;
-  --color-no: #ff4f7b;
-  --color-brand: #ff7a1a;
-  --color-gold: #fbbf24;
+  /* Text */
+  --color-fg: #1d2129;
+  --color-dim: #4e5969;
+  --color-faint: #86909c;
+
+  /* Brand & semantic */
+  --color-brand: #1c55fb;
+  --color-brand-hover: #4171fc;
+  --color-brand-active: #1444d6;
+  --color-brand-light: #e8efff;
+  --color-yes: #00b42a;
+  --color-no: #f53f3f;
+  --color-gold: #ff7d00;
 
   --animate-marquee: marquee var(--marquee-duration, 60s) linear infinite;
   --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
@@ -36,17 +48,41 @@
   }
   @keyframes pulse-ring {
     0% {
-      box-shadow: 0 0 0 0 rgb(25 227 161 / 0.55);
+      box-shadow: 0 0 0 0 rgb(0 180 42 / 0.45);
     }
     100% {
-      box-shadow: 0 0 0 10px rgb(25 227 161 / 0);
+      box-shadow: 0 0 0 8px rgb(0 180 42 / 0);
     }
+  }
+}
+
+/* 黑夜模式: the same tokens, dark. Toggled by the `dark` class on <html> (see lib/theme.ts). */
+@layer base {
+  html.dark {
+    color-scheme: dark;
+    --color-canvas: #0e1014;
+    --color-panel: #16181d;
+    --color-raised: #1b1e24;
+    --color-fill: #22252c;
+    --color-fill-2: #2c3038;
+    --color-line: #272a31;
+    --color-line-strong: #3a3e47;
+    --color-fg: #e5e7ec;
+    --color-dim: #a2a8b6;
+    --color-faint: #6e7584;
+    --color-brand: #4c7bff;
+    --color-brand-hover: #6a91ff;
+    --color-brand-active: #3462f0;
+    --color-brand-light: #1b2645;
+    --color-yes: #23c343;
+    --color-no: #f76560;
+    --color-gold: #ff9a2e;
   }
 }
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     background: var(--color-canvas);
     -webkit-tap-highlight-color: transparent;
   }
@@ -55,7 +91,10 @@
     min-height: 100dvh;
   }
   ::selection {
-    background: rgb(255 122 26 / 0.35);
+    background: rgb(28 85 251 / 0.18);
+  }
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
@@ -71,27 +110,52 @@
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+    scrollbar-color: var(--color-line-strong) transparent;
   }
 }
 
-/* Glass card with a hairline border. */
-@utility glass {
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.015));
+/* White card with a hairline border. */
+@utility surface {
+  background: var(--color-panel);
   border: 1px solid var(--color-line);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
-/* Card whose hairline border lights up in the brand colour on hover. */
-@utility glow-border {
+/* Card that lifts slightly and takes a brand-coloured border on hover. */
+@utility card-hover {
   transition:
-    border-color 0.25s ease,
-    background-color 0.25s ease,
-    transform 0.3s ease;
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   &:hover {
-    border-color: rgb(255 122 26 / 0.45);
+    border-color: rgb(28 85 251 / 0.45);
+    box-shadow: 0 6px 20px rgb(29 33 41 / 0.08);
   }
+}
+
+/* Section heading: 28px / 600, as used for every block title on ft.tech. */
+@utility section-title {
+  font-size: 1.75rem;
+  line-height: 2.125rem;
+  font-weight: 600;
+  color: var(--color-fg);
+}
+
+/* Recharts chrome follows the theme tokens. */
+@layer base {
+  .recharts-cartesian-grid line {
+    stroke: var(--color-line);
+  }
+  .recharts-cartesian-axis-tick-value {
+    fill: var(--color-faint);
+  }
+  .recharts-tooltip-cursor {
+    stroke: var(--color-line-strong);
+  }
+}
+
+/* Unlayered so it beats the card-hover utility. */
+html.dark .card-hover:hover {
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
 }
 
 @utility tabular {

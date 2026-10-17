@@ -96,7 +96,7 @@ export default function Admin() {
 
   return (
     <div className="space-y-6">
-      <h1 className="flex items-center gap-2 font-display text-3xl font-bold">
+      <h1 className="flex items-center gap-2 section-title">
         <Shield className="size-7 text-gold" /> 管理后台
       </h1>
       <PendingMarkets />
@@ -119,7 +119,7 @@ export default function Admin() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className="border-b border-line last:border-0 hover:bg-white/[0.02]">
+                  <tr key={u.id} className="border-b border-line last:border-0 hover:bg-raised">
                     <td className="px-5 py-3">
                       <Link to={`/u/${u.id}`} className="flex items-center gap-2.5">
                         <Avatar id={u.id} name={u.displayName} size={30} />

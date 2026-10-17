@@ -1,6 +1,3 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/jetbrains-mono';
-import '@fontsource-variable/space-grotesk';
 import './index.css';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,7 +6,13 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import { ApiError } from './lib/api';
+import { useTheme } from './lib/theme';
 import { router } from './router';
+
+function ThemedToaster() {
+  const theme = useTheme();
+  return <Toaster theme={theme} position="top-center" richColors />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,12 +28,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
-      <Toaster
-        theme="dark"
-        position="top-center"
-        richColors
-        toastOptions={{ style: { background: '#0b0d18', border: '1px solid rgb(255 255 255 / 0.12)' } }}
-      />
+      <ThemedToaster />
     </QueryClientProvider>
   </StrictMode>,
 );

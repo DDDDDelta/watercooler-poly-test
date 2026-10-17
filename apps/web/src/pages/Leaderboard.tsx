@@ -10,22 +10,11 @@ import { api, type LeaderboardSort } from '../lib/api';
 import { useMe } from '../lib/auth';
 import { formatSigned } from '../lib/format';
 
+/** Podium order on screen is 2nd, 1st, 3rd. */
 const PODIUM = [
-  {
-    ring: 'from-slate-200 to-slate-500',
-    glow: 'rgb(203 213 225 / 0.35)',
-    icon: Medal,
-    color: 'text-slate-300',
-    h: 'sm:mt-8',
-  },
-  { ring: 'bg-amber-400', glow: 'rgb(251 191 36 / 0.3)', icon: Crown, color: 'text-gold', h: '' },
-  {
-    ring: 'from-orange-300 to-orange-600',
-    glow: 'rgb(251 146 60 / 0.35)',
-    icon: Medal,
-    color: 'text-orange-400',
-    h: 'sm:mt-12',
-  },
+  { place: 2, ring: '#c9cdd4', text: '#86909c', icon: Medal, h: 'sm:mt-8' },
+  { place: 1, ring: '#f7ba1e', text: '#e09600', icon: Crown, h: '' },
+  { place: 3, ring: '#e6965a', text: '#d0763a', icon: Medal, h: 'sm:mt-12' },
 ];
 
 export default function Leaderboard() {
@@ -47,52 +36,54 @@ export default function Leaderboard() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 font-display text-3xl font-bold">
-            <Trophy className="size-7 text-gold" /> 预言家排行榜
-          </h1>
-          <p className="mt-1 text-dim">谁才是茶水间最准的那张嘴</p>
-        </div>
-        <Segmented
-          value={sort}
-          onChange={setSort}
-          options={[
-            { value: 'profit', label: '盈利' },
-            { value: 'netWorth', label: '总资产' },
-            { value: 'volume', label: '交易次数' },
-          ]}
-        />
+      <div className="text-center">
+        <h1 className="section-title inline-flex items-center gap-2">
+          <Trophy className="size-7 text-brand" /> 预言家排行榜
+        </h1>
+        <p className="mt-3 text-dim">谁才是茶水间最准的那张嘴</p>
       </div>
+      <Segmented
+        variant="tabs"
+        underline={false}
+        className="mt-8 justify-center gap-14"
+        value={sort}
+        onChange={setSort}
+        options={[
+          { value: 'profit', label: '盈利' },
+          { value: 'netWorth', label: '总资产' },
+          { value: 'volume', label: '交易次数' },
+        ]}
+      />
 
       <div className="mt-10 grid grid-cols-3 items-start gap-3 sm:gap-6">
-        {podium.map((e, i) =>
-          e ? (
-            <Link key={e.user.id} to={`/u/${e.user.id}`} className={clsx('group', PODIUM[i]!.h)}>
-              <Card className="glow-border relative flex flex-col items-center px-2 py-6 text-center transition group-hover:-translate-y-1">
-                <div
-                  className={clsx('rounded-full p-[3px]', PODIUM[i]!.ring)}
-                  style={{ boxShadow: `0 0 40px ${PODIUM[i]!.glow}` }}
-                >
+        {podium.map((e, i) => {
+          const slot = PODIUM[i]!;
+          const Icon = slot.icon;
+          return e ? (
+            <Link key={e.user.id} to={`/u/${e.user.id}`} className={clsx('group', slot.h)}>
+              <Card className="card-hover flex flex-col items-center px-2 py-7 text-center">
+                <div className="rounded-full p-[5px]" style={{ background: slot.ring }}>
                   <Avatar
                     id={e.user.id}
                     name={e.user.displayName}
-                    size={i === 1 ? 76 : 60}
-                    className="ring-4 ring-canvas"
+                    size={slot.place === 1 ? 76 : 60}
+                    className="ring-[3px] ring-panel"
                   />
                 </div>
-                {(() => {
-                  const Icon = PODIUM[i]!.icon;
-                  return <Icon className={clsx('mt-3 size-5', PODIUM[i]!.color)} />;
-                })()}
-                <div className="mt-1 max-w-full truncate font-semibold">{e.user.displayName}</div>
+                <div className="mt-3 flex items-center gap-1 text-sm" style={{ color: slot.text }}>
+                  <Icon className="size-4" />
+                  <span className="font-mono font-bold">No.{slot.place}</span>
+                </div>
+                <div className="mt-1 max-w-full truncate font-semibold group-hover:text-brand">
+                  {e.user.displayName}
+                </div>
                 <div className="mt-1 font-mono text-sm sm:text-base">{metric(e)}</div>
               </Card>
             </Link>
           ) : (
             <div key={i} />
-          ),
-        )}
+          );
+        })}
       </div>
 
       <Card className="mt-8 overflow-hidden">
@@ -101,21 +92,21 @@ export default function Leaderboard() {
             key={e.user.id}
             to={`/u/${e.user.id}`}
             className={clsx(
-              'flex items-center gap-4 border-b border-line px-5 py-3 transition last:border-0 hover:bg-white/[0.03]',
-              e.user.id === me?.id && 'bg-brand/[0.08]',
+              'flex items-center gap-4 border-b border-line px-5 py-3.5 transition last:border-0 hover:bg-raised',
+              e.user.id === me?.id && 'bg-brand-light',
             )}
           >
-            <span className="w-6 text-center font-display font-semibold text-faint">{e.rank}</span>
+            <span className="w-6 text-center font-mono font-semibold text-faint">{e.rank}</span>
             <Avatar id={e.user.id} name={e.user.displayName} size={34} />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">
+              <div className="truncate">
                 {e.user.displayName} {e.user.id === me?.id && <span className="text-xs text-brand">（你）</span>}
               </div>
               <div className="text-xs text-faint">
                 {e.stats.tradeCount} 笔交易 · {e.stats.marketsTraded} 个市场
               </div>
             </div>
-            <div className="text-right font-mono tabular">{metric(e)}</div>
+            <div className="text-right font-mono">{metric(e)}</div>
           </Link>
         ))}
         {data.length <= 3 && <div className="py-8 text-center text-sm text-faint">人还不够多，快拉同事来玩</div>}

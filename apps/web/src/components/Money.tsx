@@ -9,8 +9,8 @@ export function Drop({ className }: { className?: string }) {
       <path d="M8 1.2c2.6 3.1 4.8 5.8 4.8 8.3a4.8 4.8 0 0 1-9.6 0c0-2.5 2.2-5.2 4.8-8.3Z" fill="currentColor" />
       <path
         d="M6 10.2a2.1 2.1 0 0 0 2 2"
-        stroke="#05060c"
-        strokeOpacity=".7"
+        stroke="#fff"
+        strokeOpacity=".85"
         strokeWidth="1.1"
         strokeLinecap="round"
         fill="none"

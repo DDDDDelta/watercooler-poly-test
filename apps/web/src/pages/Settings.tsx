@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="font-display text-3xl font-bold">账号设置</h1>
+      <h1 className="section-title">账号设置</h1>
       <Card className="space-y-4 p-6">
         <h2 className="font-semibold">个人资料</h2>
         <Field label="用户名" hint="用户名不可修改">

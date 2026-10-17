@@ -2,6 +2,7 @@ import type { MarketSummary, PricePoint } from '@watercooler/shared';
 import { useId, useMemo } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { outcomeColor } from '../lib/colors';
+import { useThemeColor } from '../lib/theme';
 
 const MAX_LINES = 6;
 
@@ -46,12 +47,18 @@ const fullFmt = new Intl.DateTimeFormat('zh-CN', {
 
 export default function PriceChart({ market, points }: { market: MarketSummary; points: PricePoint[] }) {
   const gradientId = useId();
+  const brand = useThemeColor('--color-brand');
   const series = useMemo(() => {
     const ranked = market.isBinary
       ? market.outcomes.slice(0, 1)
       : [...market.outcomes].sort((a, b) => b.probability - a.probability).slice(0, MAX_LINES);
-    return ranked.map((o) => ({ key: `o${o.index}`, label: o.label, color: outcomeColor(o.index, market.isBinary) }));
-  }, [market]);
+    // Binary markets plot the first outcome's probability in the brand blue, ft.tech style.
+    return ranked.map((o) => ({
+      key: `o${o.index}`,
+      label: o.label,
+      color: market.isBinary ? brand : outcomeColor(o.index, false),
+    }));
+  }, [market, brand]);
 
   const data = useMemo(
     () =>
@@ -77,11 +84,11 @@ export default function PriceChart({ market, points }: { market: MarketSummary; 
       <ComposedChart data={data} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={series[0]?.color} stopOpacity={0.35} />
+            <stop offset="0%" stopColor={series[0]?.color} stopOpacity={0.18} />
             <stop offset="100%" stopColor={series[0]?.color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="rgb(255 255 255 / 0.05)" vertical={false} strokeDasharray="3 6" />
+        <CartesianGrid vertical={false} strokeDasharray="3 4" />
         <XAxis
           dataKey="t"
           type="number"
@@ -89,7 +96,7 @@ export default function PriceChart({ market, points }: { market: MarketSummary; 
           domain={[start, end]}
           ticks={ticks}
           tickFormatter={tickFormat}
-          tick={{ fill: '#5d6385', fontSize: 11 }}
+          tick={{ fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           minTickGap={24}
@@ -99,17 +106,17 @@ export default function PriceChart({ market, points }: { market: MarketSummary; 
           domain={[0, 100]}
           ticks={[0, 25, 50, 75, 100]}
           tickFormatter={(v: number) => `${v}%`}
-          tick={{ fill: '#5d6385', fontSize: 11 }}
+          tick={{ fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           width={44}
         />
         <Tooltip
-          cursor={{ stroke: 'rgb(255 255 255 / 0.25)', strokeDasharray: '4 4' }}
+          cursor={{ strokeDasharray: '4 4' }}
           content={({ active, payload, label }) => {
             if (!active || !payload?.length) return null;
             return (
-              <div className="rounded-xl border border-line-strong bg-panel/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+              <div className="rounded border border-line bg-panel px-3 py-2 text-xs shadow-[0_4px_16px_rgb(29_33_41/0.12)]">
                 <div className="mb-1 text-faint">{fullFmt.format(Number(label))}</div>
                 {series.map((s) => {
                   const item = payload.find((p) => p.dataKey === s.key);
@@ -133,12 +140,11 @@ export default function PriceChart({ market, points }: { market: MarketSummary; 
             type="stepAfter"
             dataKey={series[0].key}
             stroke={series[0].color}
-            strokeWidth={2.25}
+            strokeWidth={2}
             fill={`url(#${gradientId})`}
             isAnimationActive={false}
             dot={false}
             activeDot={{ r: 4, strokeWidth: 0, fill: series[0].color }}
-            style={{ filter: `drop-shadow(0 0 6px ${series[0].color}88)` }}
           />
         ) : (
           series.map((s) => (
@@ -151,7 +157,6 @@ export default function PriceChart({ market, points }: { market: MarketSummary; 
               dot={false}
               isAnimationActive={false}
               activeDot={{ r: 3.5, strokeWidth: 0, fill: s.color }}
-              style={{ filter: `drop-shadow(0 0 5px ${s.color}77)` }}
             />
           ))
         )}

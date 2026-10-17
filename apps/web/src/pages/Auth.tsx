@@ -13,11 +13,11 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: Rea
   return (
     <div className="flex min-h-[70vh] items-center justify-center py-8">
       <div className="relative w-full max-w-md">
-        <div className="glass relative rounded-3xl p-8">
+        <div className="surface relative rounded-lg p-8 shadow-[0_12px_40px_rgb(29_33_41/0.06)]">
           <div className="mb-6 flex justify-center">
             <Logo />
           </div>
-          <h1 className="text-center font-display text-2xl font-bold">{title}</h1>
+          <h1 className="text-center text-2xl font-semibold">{title}</h1>
           <p className="mt-1.5 text-center text-sm text-dim">{subtitle}</p>
           <div className="mt-7">{children}</div>
         </div>
