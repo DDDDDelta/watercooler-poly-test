@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # pnpm only exists after `corepack enable` below, so setup-node can't cache it.
+          package-manager-cache: false
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
