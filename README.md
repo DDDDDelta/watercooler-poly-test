@@ -58,7 +58,7 @@ pnpm dev         # 前端 http://localhost:5173 ，API http://localhost:3000
 
 ### GitHub Actions 自动部署
 
-推送到 `main` 后自动构建、测试并通过 SSH 部署到服务器（systemd + nginx 反向代理，支持部署在子路径下，失败自动回滚）。服务器一次性准备和需要配置的 Secrets 见 [`deploy/README.md`](deploy/README.md)。
+推送到 `main` 后自动构建、测试并通过 SSH 部署到服务器（后台脚本运行 + nginx 反向代理，支持部署在子路径下，失败自动回滚，不需要 systemd 和 sudo）。服务器一次性准备和需要配置的 Secrets 见 [`deploy/README.md`](deploy/README.md)。
 
 ### 直接运行
 

@@ -23,7 +23,7 @@ jobs:
       # Where the app lives on the server: ~/watercooler in the home directory of DEPLOY_USER.
       DEPLOY_DIR: ~/watercooler
       # URL prefix the site is served under (https://<domain>/watercooler/). nginx strips it before
-      # proxying; keep it in sync with BASE_PATH in deploy/watercooler.service.
+      # proxying; keep it in sync with BASE_PATH in deploy/watercooler.sh.
       BASE_PATH: /watercooler
     steps:
       - uses: actions/checkout@v5
@@ -54,7 +54,8 @@ jobs:
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             apps/server/package.json apps/server/dist \
             apps/web/package.json apps/web/dist \
-            packages/shared/package.json
+            packages/shared/package.json \
+            deploy/watercooler.sh
 
       - name: Configure SSH
         env:

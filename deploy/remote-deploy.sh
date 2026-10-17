@@ -9,19 +9,31 @@
 #   releases/<release>/   unpacked builds (the newest $KEEP_RELEASES are kept)
 #   current -> releases/  the release the service runs
 #   shared/data/          SQLite database, survives deploys
+#   shared/logs/          app log (see watercooler.sh logs)
 #   shared/.env           optional settings (INVITE_CODE, ...), linked into every release
+#   watercooler.sh        start/stop/restart script, refreshed from deploy/watercooler.sh on every deploy
 set -euo pipefail
 
 usage='usage: remote-deploy.sh <app-dir> <release>'
 APP_DIR=${1:?$usage}
 RELEASE=${2:?$usage}
-# Override to use something other than systemd, e.g. RESTART_CMD="pm2 restart watercooler".
-RESTART_CMD=${RESTART_CMD:-sudo -n systemctl restart watercooler}
+# Defaults to "<app-dir>/watercooler.sh restart"; override to manage the process another way.
+RESTART_CMD=${RESTART_CMD:-}
 HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:3000/api/config}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
 
+# Node usually comes from nvm, which a non-interactive SSH shell doesn't load by itself.
 if ! command -v node >/dev/null 2>&1; then
-  echo "!! Node.js is not on PATH for $(whoami). Install Node 22 system-wide (see deploy/README.md)." >&2
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    set +eu
+    # shellcheck source=/dev/null
+    . "$NVM_DIR/nvm.sh"
+    set -eu
+  fi
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "!! Node.js not found for $(whoami). Install Node 22 with nvm and run: nvm alias default 22" >&2
   exit 1
 fi
 # shellcheck disable=SC2016 # JavaScript, not shell
@@ -41,6 +53,7 @@ case $APP_DIR in
 esac
 mkdir -p "$APP_DIR"
 APP_DIR=$(cd "$APP_DIR" && pwd -P)
+RESTART_CMD=${RESTART_CMD:-"$APP_DIR/watercooler.sh restart"}
 RELEASES="$APP_DIR/releases"
 TARGET="$RELEASES/$RELEASE"
 
@@ -61,6 +74,8 @@ fi
 
 # The app loads <release>/.env at startup; point it at the shared one (a missing file is ignored).
 ln -sfn "$APP_DIR/shared/.env" "$TARGET/.env"
+# A stable copy of the control script, so it also works for rolling back to older releases.
+install -m 755 "$TARGET/deploy/watercooler.sh" "$APP_DIR/watercooler.sh"
 
 activate() {
   ln -sfn "$1" "$APP_DIR/current.tmp"
@@ -86,14 +101,14 @@ echo "==> Switching to $RELEASE and restarting"
 activate "$TARGET"
 failure=""
 if ! $RESTART_CMD; then
-  failure="'$RESTART_CMD' failed; check the systemd unit and the sudoers rule (deploy/README.md)"
+  failure="'$RESTART_CMD' failed"
 elif ! wait_healthy; then
   failure="$HEALTH_URL did not come up healthy"
 fi
 
 if [ -n "$failure" ]; then
   echo "!! $failure" >&2
-  journalctl -u watercooler -n 40 --no-pager 2>/dev/null || true
+  tail -n 40 "$APP_DIR/shared/logs/watercooler.log" 2>/dev/null || true
   if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$TARGET" ]; then
     echo "!! Rolling back to $(basename "$previous")" >&2
     activate "$previous"

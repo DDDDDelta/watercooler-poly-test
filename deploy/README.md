@@ -3,57 +3,41 @@
 推送到 `main` 分支，或者在 GitHub 的 **Actions → Deploy → Run workflow** 手动触发，就会自动部署：
 
 1. 在 GitHub 上安装依赖、跑类型检查和测试，用 `BASE_PATH=/watercooler` 构建前后端
-2. 打包上传到服务器上部署用户家目录下的 `~/watercooler/releases/<时间>-<commit>/`
-3. 在服务器上安装生产依赖（`better-sqlite3` 是原生模块，在服务器上安装才能和服务器的 Node 版本匹配）
-4. 把 `~/watercooler/current` 指向新版本，重启 systemd 服务
-5. 检查 `http://127.0.0.1:3000/api/config`；如果 30 秒内没起来，**自动切回上一个版本**并让 workflow 失败
+2. 通过 SSH 上传到服务器上部署用户家目录下的 `~/watercooler/releases/<时间>-<commit>/`
+3. 在服务器上安装生产依赖（用 nvm 的 Node；`better-sqlite3` 是原生模块，在服务器上安装才能和服务器的 Node 版本匹配）
+4. 把 `~/watercooler/current` 指向新版本，用 `~/watercooler/watercooler.sh restart` 在后台重启
+5. 检查 `http://127.0.0.1:3000/api/config`；如果没起来，**自动切回上一个版本**并让 workflow 失败
+
+不用 systemd，也不需要 sudo：进程由 `watercooler.sh` 用 `nohup` 在后台运行，pid 和日志放在 `shared/` 里。
 
 服务器上的目录结构（`~` 是 `DEPLOY_USER` 的家目录）：
 
 ```
 ~/watercooler/
+  watercooler.sh                启动/停止/重启脚本（每次部署自动更新）
   current -> releases/20261017093000-1a2b3c4   正在运行的版本
-  releases/                                     最近 5 个版本
-  shared/data/watercooler.db                    数据库（部署不会动它）
-  shared/.env                                   可选配置（邀请码等）
+  releases/                     最近 5 个版本
+  shared/data/watercooler.db    数据库（部署不会动它）
+  shared/logs/watercooler.log   日志（超过 10 MB 自动轮转）
+  shared/watercooler.pid        进程号
+  shared/.env                   可选配置（邀请码等）
 ```
+
+运行参数写在 [`deploy/watercooler.sh`](watercooler.sh) 顶部：`HOST=127.0.0.1`（只监听本机，必须经过 nginx）、`PORT=3000`、`BASE_PATH=/watercooler`、数据库路径。
 
 ## 一、服务器一次性准备
 
-要求：Linux + systemd，**系统级**安装的 Node.js ≥ 20.19（推荐 22）。只在某个用户的 shell 里用 nvm 装的 Node 不行，systemd 和 GitHub Actions 的 SSH 会话都找不到它。
-
-> Ubuntu 24.04 用 `apt install nodejs` 装到的是 18 版，太旧了。用 NodeSource 安装 22：
->
-> ```bash
-> curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-> sudo apt install -y nodejs
-> ```
-
-用 root 或有 sudo 权限的账号执行：
+全部以**部署用户**（`DEPLOY_USER`）身份执行，不需要 root：
 
 ```bash
-# 1. 部署用户（也可以用已有的用户，把下面所有的 deploy 换成它）
-sudo useradd --create-home --shell /bin/bash deploy
+# 1. 用 nvm 装 Node 22，并设为默认版本（部署脚本和 watercooler.sh 会自动加载 ~/.nvm/nvm.sh）
+nvm install 22
+nvm alias default 22
 
-# 2. systemd 服务：把仓库里的 deploy/watercooler.service 复制过去。
-#    User= 改成部署用户；先用 `command -v node` 确认 node 的路径，和 ExecStart 里的 /usr/bin/node 不一致就改掉。
-#    ~/watercooler 目录不用手动建，第一次部署会自动创建。
-sudo cp watercooler.service /etc/systemd/system/watercooler.service
-sudo systemctl daemon-reload
-sudo systemctl enable watercooler    # 先不用 start，第一次部署时会自动启动
+# 2. 服务器重启后自动拉起（第一次部署之前加也没关系）
+(crontab -l 2>/dev/null; echo '@reboot $HOME/watercooler/watercooler.sh start') | crontab -
 
-# 3. 允许 deploy 用户免密重启这个服务（只授权这一条命令）
-echo "deploy ALL=(root) NOPASSWD: $(command -v systemctl) restart watercooler" | sudo tee /etc/sudoers.d/watercooler
-sudo chmod 440 /etc/sudoers.d/watercooler
-sudo visudo -cf /etc/sudoers.d/watercooler
-
-# 4. 可选：让 deploy 用户能看服务日志（部署失败时会把日志打印到 Actions 里）
-sudo usermod -aG systemd-journal deploy
-```
-
-服务的运行参数都写在 `watercooler.service` 里：`HOST=127.0.0.1`（只监听本机，必须经过 nginx）、`PORT=3000`、`BASE_PATH=/watercooler`、数据库路径。其他配置写到 `~/watercooler/shared/.env`，以部署用户身份执行，比如：
-
-```bash
+# 3. 可选：额外配置，比如邀请码
 mkdir -p ~/watercooler/shared
 tee ~/watercooler/shared/.env <<'CONF'
 INVITE_CODE=换成你的邀请码
@@ -62,9 +46,14 @@ INVITE_CODE=换成你的邀请码
 CONF
 ```
 
-改完 `.env` 后执行 `sudo systemctl restart watercooler` 生效。
+改完 `.env` 后执行 `~/watercooler/watercooler.sh restart` 生效。`watercooler.sh` 里写死的 `HOST`、`PORT` 等不会被 `.env` 覆盖。
 
-> 服务器上要能访问 npm 仓库来安装依赖。`better-sqlite3` 会从 GitHub 下载预编译文件，下载失败时会从源码编译，这时需要 `python3`、`make` 和 `g++`（Debian/Ubuntu：`sudo apt install -y build-essential python3`）。
+注意：
+
+- nvm 是按用户安装的，必须装在 `DEPLOY_USER` 这个账号下。
+- 服务器要能访问 npm 仓库来安装依赖。`better-sqlite3` 会从 GitHub 下载预编译文件，下载失败时会从源码编译，需要 `python3`、`make`、`g++`（`sudo apt install -y build-essential python3`）。
+- 本机 3000 端口不能被别的程序占用。
+- 如果发现 SSH 断开后进程被杀（`/etc/systemd/logind.conf` 里 `KillUserProcesses=yes`），执行 `sudo loginctl enable-linger <部署用户>`。Ubuntu 默认不会杀。
 
 ## 二、SSH 密钥
 
@@ -100,7 +89,7 @@ ssh-keyscan -p 22 ky-z.com
 | --------- | -------------------------------------------------------------------------- |
 | `APP_URL` | 如 `https://ky-z.com/watercooler/`，设置后部署完会从公网访问一次做冒烟测试 |
 
-部署目录和子路径直接写在 `.github/workflows/deploy.yml` 顶部：`DEPLOY_DIR: ~/watercooler`、`BASE_PATH: /watercooler`。要改的话，`watercooler.service` 里对应的路径（以及 nginx）要一起改。
+部署目录和子路径直接写在 `.github/workflows/deploy.yml` 顶部：`DEPLOY_DIR: ~/watercooler`、`BASE_PATH: /watercooler`。要改的话，`deploy/watercooler.sh` 里的 `BASE_PATH`（以及 nginx）要一起改。
 
 `DEPLOY_KNOWN_HOSTS` 直接粘贴 `ssh-keyscan` 的全部输出即可（`ssh-rsa`、`ecdsa-sha2-nistp256`、`ssh-ed25519` 几行都要，`#` 开头的注释行留着也没关系）。
 
@@ -127,22 +116,20 @@ location /watercooler/ {
 
 ## 五、日常运维
 
+以部署用户身份：
+
 ```bash
-journalctl -u watercooler -f                     # 看日志
-ls ~/watercooler/releases                        # 已部署的版本（以部署用户身份执行）
+~/watercooler/watercooler.sh status      # 是否在运行
+~/watercooler/watercooler.sh logs        # 跟踪日志
+~/watercooler/watercooler.sh restart     # 重启（也有 start / stop）
+ls ~/watercooler/releases                # 已部署的版本
 
 # 手动回滚到某个版本
 ln -sfn ~/watercooler/releases/<版本> ~/watercooler/current
-sudo systemctl restart watercooler
+~/watercooler/watercooler.sh restart
 
 # 备份数据库（WAL 模式，不要直接复制 db 文件）
 sqlite3 ~/watercooler/shared/data/watercooler.db ".backup '$HOME/watercooler/shared/backup-$(date +%F).db'"
 ```
 
 第一个注册的用户自动成为管理员；也可以在 `shared/.env` 里用 `ADMIN_USERNAMES` 指定。
-
-如果不用 systemd（比如用 pm2），把 `.github/workflows/deploy.yml` 里 `Activate release` 步骤的命令改成用 `RESTART_CMD` 指定重启方式：
-
-```bash
-ssh server "RESTART_CMD='pm2 restart watercooler' bash -l -s -- '$REMOTE_DIR' '$RELEASE'" < deploy/remote-deploy.sh
-```

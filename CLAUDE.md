@@ -22,4 +22,4 @@ Polymarket-style play-money prediction market for coworkers. UI copy is Chinese;
 - Mutating endpoints are POST with a JSON body (CSRF guard in `app.ts`).
 - Trade previews in the browser must use the same `quoteBuy`/`quoteSell` the server executes.
 - The app may be served under a sub-path (`BASE_PATH`, e.g. `/watercooler` in production). Never hard-code root-relative URLs in the web app: use router links/`navigate()` (router has a `basename`) and `import.meta.env.BASE_URL` for anything else.
-- Deployment: `.github/workflows/deploy.yml` + `deploy/` (remote script, systemd unit, setup guide).
+- Deployment: `.github/workflows/deploy.yml` + `deploy/` (remote activation script, `watercooler.sh` start/stop/restart script, setup guide).
