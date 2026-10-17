@@ -20,6 +20,10 @@ RESTART_CMD=${RESTART_CMD:-sudo -n systemctl restart watercooler}
 HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:3000/api/config}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "!! Node.js is not on PATH for $(whoami). Install Node 22 system-wide (see deploy/README.md)." >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # JavaScript, not shell
 node -e '
   const [major, minor] = process.versions.node.split(".").map(Number);
