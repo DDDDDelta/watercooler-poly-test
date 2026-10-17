@@ -80,16 +80,22 @@ previous=$(readlink -f "$APP_DIR/current" 2>/dev/null || true)
 
 echo "==> Switching to $RELEASE and restarting"
 activate "$TARGET"
-$RESTART_CMD
+failure=""
+if ! $RESTART_CMD; then
+  failure="'$RESTART_CMD' failed; check the systemd unit and the sudoers rule (deploy/README.md)"
+elif ! wait_healthy; then
+  failure="$HEALTH_URL did not come up healthy"
+fi
 
-if ! wait_healthy; then
-  echo "!! $HEALTH_URL did not come up healthy" >&2
+if [ -n "$failure" ]; then
+  echo "!! $failure" >&2
   journalctl -u watercooler -n 40 --no-pager 2>/dev/null || true
   if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$TARGET" ]; then
     echo "!! Rolling back to $(basename "$previous")" >&2
     activate "$previous"
-    $RESTART_CMD
-    wait_healthy || echo "!! Previous release is not healthy either" >&2
+    if ! { $RESTART_CMD && wait_healthy; }; then
+      echo "!! Previous release is not healthy either" >&2
+    fi
   fi
   exit 1
 fi
