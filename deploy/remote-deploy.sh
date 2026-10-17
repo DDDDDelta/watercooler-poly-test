@@ -4,11 +4,12 @@
 #
 #   ssh server "bash -l -s -- <app-dir> <release>" < deploy/remote-deploy.sh
 #
+# <app-dir> may be absolute or relative to the deploy user's home (e.g. "watercooler" = ~/watercooler).
 # Layout under <app-dir>:
 #   releases/<release>/   unpacked builds (the newest $KEEP_RELEASES are kept)
 #   current -> releases/  the release the service runs
 #   shared/data/          SQLite database, survives deploys
-#   shared/.env           optional settings (INVITE_CODE, ...) read by the systemd unit
+#   shared/.env           optional settings (INVITE_CODE, ...), linked into every release
 set -euo pipefail
 
 usage='usage: remote-deploy.sh <app-dir> <release>'
@@ -27,6 +28,13 @@ node -e '
     process.exit(1);
   }'
 
+# shellcheck disable=SC2088 # matching a literal "~" on purpose
+case $APP_DIR in
+  /*) ;;
+  "~") APP_DIR=$HOME ;;
+  "~/"*) APP_DIR="$HOME/${APP_DIR#"~/"}" ;;
+  *) APP_DIR="$HOME/$APP_DIR" ;;
+esac
 mkdir -p "$APP_DIR"
 APP_DIR=$(cd "$APP_DIR" && pwd -P)
 RELEASES="$APP_DIR/releases"
@@ -46,6 +54,9 @@ else
   pnpm_version=$(node -p 'require("./package.json").packageManager.split("@")[1]')
   npx --yes "pnpm@$pnpm_version" install --prod --frozen-lockfile --filter @watercooler/server
 fi
+
+# The app loads <release>/.env at startup; point it at the shared one (a missing file is ignored).
+ln -sfn "$APP_DIR/shared/.env" "$TARGET/.env"
 
 activate() {
   ln -sfn "$1" "$APP_DIR/current.tmp"

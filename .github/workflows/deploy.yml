@@ -20,9 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      # URL prefix the site is served under; nginx strips it before proxying to the app.
-      BASE_PATH: ${{ vars.BASE_PATH || '/watercooler' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/watercooler' }}
+      # Where the app lives on the server: ~/watercooler in the home directory of DEPLOY_USER.
+      DEPLOY_DIR: ~/watercooler
+      # URL prefix the site is served under (https://<domain>/watercooler/). nginx strips it before
+      # proxying; keep it in sync with BASE_PATH in deploy/watercooler.service.
+      BASE_PATH: /watercooler
     steps:
       - uses: actions/checkout@v5
 
@@ -44,6 +46,8 @@ jobs:
         run: |
           RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
           echo "RELEASE=$RELEASE" >> "$GITHUB_ENV"
+          # ssh and scp resolve paths without a leading "/" against the remote home directory.
+          echo "REMOTE_DIR=${DEPLOY_DIR#\~/}" >> "$GITHUB_ENV"
           tar -czf release.tgz \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             apps/server/package.json apps/server/dist \
@@ -81,13 +85,13 @@ jobs:
       - name: Upload release
         run: |
           # shellcheck disable=SC2029 # expanding on the runner is intended
-          ssh server "mkdir -p '$DEPLOY_PATH/releases'"
-          scp -q release.tgz "server:$DEPLOY_PATH/releases/$RELEASE.tgz"
+          ssh server "mkdir -p '$REMOTE_DIR/releases'"
+          scp -q release.tgz "server:$REMOTE_DIR/releases/$RELEASE.tgz"
 
       - name: Activate release
         run: |
           # shellcheck disable=SC2029 # expanding on the runner is intended
-          ssh server "bash -l -s -- '$DEPLOY_PATH' '$RELEASE'" < deploy/remote-deploy.sh
+          ssh server "bash -l -s -- '$REMOTE_DIR' '$RELEASE'" < deploy/remote-deploy.sh
 
       - name: Smoke test public URL
         if: vars.APP_URL != ''
