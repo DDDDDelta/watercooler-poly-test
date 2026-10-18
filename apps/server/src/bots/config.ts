@@ -21,6 +21,18 @@ const botConfigSchema = z.object({
   webSearchTool: z.enum(['web_search_20260209', 'web_search_20250305']).optional(),
   /** Server-side refusal fallback (`fallbacks: "default"`); on by default for supported models on the official endpoint. */
   refusalFallback: z.boolean().optional(),
+  /** Optional WeCom (企业微信) smart bot: people bind their account in a group chat and then bet by chatting. */
+  wecom: z
+    .object({
+      botId: z.string().min(1),
+      secret: z.string().min(1),
+      /** Public address of this instance, for binding links and market links, e.g. https://ky-z.com/watercooler */
+      siteUrl: z.string().url(),
+      siteName: z.string().min(1).default('Watercooler'),
+      /** Messages per person per hour that go to the model. */
+      messagesPerHour: z.number().int().min(1).max(1000).default(30),
+    })
+    .optional(),
 });
 export type BotConfig = z.infer<typeof botConfigSchema>;
 

@@ -16,7 +16,7 @@ import { MINUTE } from '../lib/time';
 import { aiMarketsExist } from '../services/markets';
 import { claimDailyBonus, createUser, getUserById, getUserByUsername, toMe } from '../services/users';
 
-export function authRoutes({ db, config, now, botsEnabled }: AppDeps) {
+export function authRoutes({ db, config, now, botsEnabled, wecom }: AppDeps) {
   const app = new Hono<AppEnv>();
   const loginFailures = new RateLimiter(10, 15 * MINUTE);
   const registrations = new RateLimiter(20, 60 * MINUTE);
@@ -29,6 +29,7 @@ export function authRoutes({ db, config, now, botsEnabled }: AppDeps) {
       dailyBonus: config.dailyBonus,
       privateMode: config.privateMode,
       aiZone: botsEnabled || aiMarketsExist(db),
+      wecom: wecom !== undefined,
     }),
   );
 

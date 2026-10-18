@@ -3,9 +3,10 @@ import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { createAiMarket, ensureBots, placeAiBet, resolveAiMarket, type BotDeps } from '../src/bots/agent';
 import { loadBotConfig, type BotConfig } from '../src/bots/config';
-import { createAsk, normalizeEndpoint, type Ask, type AskRequest } from '../src/bots/llm';
+import { createAsk, createChat, normalizeEndpoint, type Ask, type AskRequest } from '../src/bots/llm';
 import { startBots } from '../src/bots/scheduler';
 import { getMarketRow } from '../src/services/markets';
+import { chatTools } from '../src/wecom/tools';
 import { setup } from './helpers';
 
 const HOUR = 3_600_000;
@@ -250,8 +251,10 @@ describe('AI bots', () => {
       req.on('end', () => {
         const json = JSON.parse(body);
         requests.push({ url: req.url, key: req.headers['x-api-key'], body: json });
-        const content =
-          requests.length === 1
+        const chatting = json.tools.some((t: { name: string }) => t.name === 'list_markets');
+        const content = chatting
+          ? [{ type: 'text', text: '你好' }]
+          : requests.length === 1
             ? [{ type: 'server_tool_use', id: 'srv_1', name: 'web_search', input: { query: 'x' } }]
             : [{ type: 'tool_use', id: 'tu_1', name: 'submit_bet', input: { option: '是', amount: 12 } }];
         res.setHeader('content-type', 'application/json');
@@ -262,7 +265,7 @@ describe('AI bots', () => {
             role: 'assistant',
             model: json.model,
             content,
-            stop_reason: requests.length === 1 ? 'pause_turn' : 'tool_use',
+            stop_reason: chatting ? 'end_turn' : requests.length === 1 ? 'pause_turn' : 'tool_use',
             stop_sequence: null,
             usage: { input_tokens: 1, output_tokens: 1 },
           }),
@@ -280,6 +283,13 @@ describe('AI bots', () => {
       expect(requests[0].body.tools[0]).toEqual({ type: 'web_search_20260209', name: 'web_search', max_uses: 1 });
       expect(requests[0].body.fallbacks).toBeUndefined(); // custom endpoint: no refusal fallback by default
       expect(requests[1].body.messages.at(-1)).toMatchObject({ role: 'assistant' }); // paused turn sent back
+
+      // The WeCom chat uses the same model and key with its own client tools and no web search.
+      const chat = createChat({ ...BOT, endpoint: `http://127.0.0.1:${port}`, apiKey: 'sk-test' });
+      const reply = await chat({ system: 's', messages: [{ role: 'user', content: '你好' }], tools: chatTools });
+      expect(reply).toMatchObject({ content: [{ type: 'text', text: '你好' }], stop_reason: 'end_turn' });
+      expect(requests[2].body.model).toBe(BOT.model);
+      expect(requests[2].body.tools.map((t: { name: string }) => t.name)).not.toContain('web_search');
     } finally {
       server.close();
     }

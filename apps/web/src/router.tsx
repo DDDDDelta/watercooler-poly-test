@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { RequireAuth } from './components/RequireAuth';
 import { RouteError } from './components/RouteError';
 import AiZone from './pages/AiZone';
+import BindWecom from './pages/BindWecom';
 import CreateMarket from './pages/CreateMarket';
 import Home from './pages/Home';
 import Leaderboard from './pages/Leaderboard';
@@ -32,6 +33,7 @@ export const router = createBrowserRouter(
             { path: '/create', element: <CreateMarket /> },
             { path: '/portfolio', element: <PortfolioPage /> },
             { path: '/settings', element: <SettingsPage /> },
+            { path: '/bind/:token', element: <BindWecom /> },
           ],
         },
         { path: '*', element: <NotFound /> },

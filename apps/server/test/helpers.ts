@@ -1,12 +1,18 @@
 import { createApp } from '../src/app';
 import { loadConfig, type Config } from '../src/config';
+import type { AppDeps } from '../src/context';
 import { openDatabase } from '../src/db';
 
-export function setup(overrides: Partial<Config> = {}) {
+/** `extra` adds optional app dependencies (like the WeCom bot), built from the test's db and clock. */
+export function setup(
+  overrides: Partial<Config> = {},
+  extra: (deps: Pick<AppDeps, 'db' | 'config' | 'now'>) => Partial<AppDeps> = () => ({}),
+) {
   const db = openDatabase(':memory:');
   const config: Config = { ...loadConfig({}), staticDir: null, ...overrides };
   const clock = { now: Date.UTC(2026, 0, 1, 4) };
-  const app = createApp({ db, config, now: () => clock.now });
+  const base = { db, config, now: () => clock.now };
+  const app = createApp({ ...base, ...extra(base) });
 
   function client() {
     let cookie = '';

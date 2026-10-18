@@ -17,6 +17,8 @@ import type {
   PricePoint,
   SiteStats,
   UserProfile,
+  WecomBinding,
+  WecomBindRequest,
 } from '@watercooler/shared';
 
 export class ApiError extends Error {
@@ -66,6 +68,10 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) => post('/auth/password', { oldPassword, newPassword }),
   updateProfile: (displayName: string) => post<{ user: Me }>('/me/profile', { displayName }),
   claimBonus: () => post<{ balance: number; amount: number }>('/me/bonus'),
+  wecomBinding: () => get<{ binding: WecomBinding | null }>('/me/wecom'),
+  wecomBindRequest: (token: string) => get<WecomBindRequest>(`/wecom/bind/${encodeURIComponent(token)}`),
+  wecomBind: (token: string) => post<WecomBinding>('/wecom/bind', { token }),
+  wecomUnbind: () => post<{ ok: true }>('/me/wecom/unbind'),
 
   stats: () => get<SiteStats>('/stats'),
   activity: (limit = 30, zone?: 'ai') => get<Bet[]>(`/activity${qs({ limit, zone })}`),

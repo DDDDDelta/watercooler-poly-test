@@ -25,6 +25,8 @@ export interface AppConfig {
   privateMode: boolean;
   /** Whether the AI zone exists (bots are running or there are AI markets). */
   aiZone: boolean;
+  /** Whether the WeCom (企业微信) bot is connected, so accounts can be bound to it. */
+  wecom: boolean;
 }
 
 /** `closed` is derived: betting time is over but the creator has not announced the result yet. */
@@ -199,4 +201,18 @@ export interface SiteStats {
   totalStaked: number;
   bettors: number;
   users: number;
+}
+
+/** A site account's link to a WeCom (企业微信) account. */
+export interface WecomBinding {
+  wecomUserId: string;
+  createdAt: number;
+}
+
+/** What a binding link would do, shown before the user confirms. */
+export interface WecomBindRequest {
+  wecomUserId: string;
+  expiresAt: number;
+  /** The signed-in user's current binding, which confirming would replace. */
+  current: WecomBinding | null;
 }

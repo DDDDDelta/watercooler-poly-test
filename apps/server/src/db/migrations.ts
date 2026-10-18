@@ -207,4 +207,41 @@ export const migrations: string[] = [
   );
   CREATE INDEX bot_attempts_kind ON bot_attempts(kind, created_at);
   `,
+  /* 4: WeCom (企业微信) bot. A binding ties one WeCom account to one site account; chat_id is the
+        group where they last talked to the bot, which is where notices go. Bind tokens are stored
+        hashed and single-use. Actions are money moves waiting for the owner to tap the confirmation
+        card. Notices record which settlement messages and reminders were already sent. */ `
+  CREATE TABLE wecom_bindings (
+    wecom_userid TEXT    PRIMARY KEY,
+    user_id      INTEGER NOT NULL UNIQUE REFERENCES users(id),
+    chat_id      TEXT,
+    created_at   INTEGER NOT NULL
+  );
+
+  CREATE TABLE wecom_bind_tokens (
+    token_hash   TEXT    PRIMARY KEY,
+    wecom_userid TEXT    NOT NULL,
+    chat_id      TEXT    NOT NULL,
+    expires_at   INTEGER NOT NULL
+  );
+  CREATE INDEX wecom_bind_tokens_user ON wecom_bind_tokens(wecom_userid);
+
+  CREATE TABLE wecom_actions (
+    id           INTEGER PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    wecom_userid TEXT    NOT NULL,
+    kind         TEXT    NOT NULL CHECK (kind IN ('bet', 'create', 'resolve', 'cancel')),
+    payload      TEXT    NOT NULL,
+    task_id      TEXT    NOT NULL UNIQUE,
+    status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed', 'cancelled')),
+    created_at   INTEGER NOT NULL
+  );
+
+  CREATE TABLE wecom_notices (
+    kind       TEXT    NOT NULL,
+    market_id  INTEGER NOT NULL REFERENCES markets(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, market_id)
+  );
+  `,
 ];

@@ -5,6 +5,7 @@ import { loadSessionUser } from './lib/session';
 import { authRoutes } from './routes/auth';
 import { marketRoutes } from './routes/markets';
 import { userRoutes } from './routes/users';
+import { wecomRoutes } from './routes/wecom';
 import { cancelOverdueMarkets } from './services/bets';
 
 /** Endpoints reachable without a session even in private mode. */
@@ -44,6 +45,7 @@ export function createApp(deps: AppDeps) {
   api.route('/', authRoutes(deps));
   api.route('/', marketRoutes(deps));
   api.route('/', userRoutes(deps));
+  api.route('/', wecomRoutes(deps));
 
   api.notFound((c) => c.json({ error: '接口不存在' }, 404));
   api.onError((err, c) => {

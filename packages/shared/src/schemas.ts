@@ -70,3 +70,7 @@ export const cancelMarketSchema = z.object({
 export const commentSchema = z.object({
   body: z.string().trim().min(1, '评论不能为空').max(1000, '评论最多 1000 字'),
 });
+
+export const wecomBindSchema = z.object({
+  token: z.string().trim().min(1, '绑定链接无效').max(200, '绑定链接无效'),
+});

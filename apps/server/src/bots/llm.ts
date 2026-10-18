@@ -28,12 +28,22 @@ export function normalizeEndpoint(endpoint: string): string {
   return endpoint.replace(/\/+$/, '').replace(/\/v1(\/messages)?$/, '');
 }
 
-export function createAsk(config: BotConfig): Ask {
+/** The client plus the request options every call shares (effort, refusal fallback). */
+function connect(config: BotConfig) {
   const baseURL = normalizeEndpoint(config.endpoint);
   const client = new Anthropic({ apiKey: config.apiKey, baseURL, maxRetries: 2, timeout: 10 * 60_000 });
+  const fallback = config.refusalFallback ?? (baseURL === OFFICIAL_ENDPOINT && FALLBACK_MODELS.has(config.model));
+  const shared = {
+    ...(config.effort ? { output_config: { effort: config.effort } } : {}),
+    ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+  };
+  return { client, shared };
+}
+
+export function createAsk(config: BotConfig): Ask {
+  const { client, shared } = connect(config);
   const searchType =
     config.webSearchTool ?? (DYNAMIC_SEARCH_MODELS.test(config.model) ? 'web_search_20260209' : 'web_search_20250305');
-  const fallback = config.refusalFallback ?? (baseURL === OFFICIAL_ENDPOINT && FALLBACK_MODELS.has(config.model));
 
   return async ({ system, prompt, maxSearches, tool }) => {
     const search: Anthropic.Beta.BetaToolUnion =
@@ -48,8 +58,7 @@ export function createAsk(config: BotConfig): Ask {
         system,
         messages,
         tools: [search, tool],
-        ...(config.effort ? { output_config: { effort: config.effort } } : {}),
-        ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+        ...shared,
       });
       if (response.stop_reason === 'refusal') return null;
       const call = response.content.find(
@@ -62,4 +71,29 @@ export function createAsk(config: BotConfig): Ask {
     }
     return null;
   };
+}
+
+export interface ChatRequest {
+  system: string;
+  messages: Anthropic.Beta.BetaMessageParam[];
+  tools: Anthropic.Beta.BetaTool[];
+}
+
+/** One model turn with client tools only (no web search): the caller runs the tools and loops. */
+export type Chat = (req: ChatRequest) => Promise<Pick<Anthropic.Beta.BetaMessage, 'content' | 'stop_reason'>>;
+
+export function createChat(config: BotConfig): Chat {
+  const { client, shared } = connect(config);
+  return (req) =>
+    client.beta.messages.create(
+      {
+        model: config.model,
+        max_tokens: 4096,
+        system: req.system,
+        messages: req.messages,
+        tools: req.tools,
+        ...shared,
+      },
+      { timeout: 2 * 60_000 },
+    );
 }
