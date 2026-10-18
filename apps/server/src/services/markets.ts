@@ -1,7 +1,7 @@
 import {
   fromCents,
-  lmsrInitialShares,
-  lmsrPrices,
+  poolShares,
+  RESOLVE_GRACE_DAYS,
   type CreateMarketInput,
   type MarketDetail,
   type MarketStatus,
@@ -20,14 +20,12 @@ export interface MarketRow {
   description: string;
   category: string;
   creator_id: number;
-  liquidity: number;
   status: 'open' | 'resolved' | 'cancelled';
   close_at: number;
   resolved_outcome_id: number | null;
   resolved_at: number | null;
-  resolved_by: number | null;
   resolution_note: string | null;
-  volume: number;
+  pot: number;
   created_at: number;
 }
 
@@ -36,25 +34,28 @@ export interface OutcomeRow {
   market_id: number;
   idx: number;
   label: string;
-  shares: number;
+  pool: number;
 }
 
 interface MarketListRow extends MarketRow {
   creator_username: string;
   creator_display_name: string;
-  trader_count: number;
+  bettor_count: number;
   comment_count: number;
-  volume_24h: number;
+  pot_24h: number;
 }
 
 export function derivedStatus(m: Pick<MarketRow, 'status' | 'close_at'>, now: number): MarketStatus {
   return m.status === 'open' && m.close_at <= now ? 'closed' : m.status;
 }
 
-/** Trading is allowed only while a market is open and before its close time. */
-export function isTradable(m: Pick<MarketRow, 'status' | 'close_at'>, now: number): boolean {
+/** Betting is allowed only while a market is open and before its close time. */
+export function isBettable(m: Pick<MarketRow, 'status' | 'close_at'>, now: number): boolean {
   return derivedStatus(m, now) === 'open';
 }
+
+/** Unresolved markets are cancelled automatically at this time. */
+export const resolveDeadline = (m: Pick<MarketRow, 'close_at'>) => m.close_at + RESOLVE_GRACE_DAYS * DAY;
 
 export function getMarketRow(db: DB, id: number): MarketRow {
   const row = db.prepare('SELECT * FROM markets WHERE id = ?').get(id) as MarketRow | undefined;
@@ -66,26 +67,23 @@ export function getOutcomeRows(db: DB, marketId: number): OutcomeRow[] {
   return db.prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY idx').all(marketId) as OutcomeRow[];
 }
 
-/** Current probabilities; resolved markets are pinned to 1 for the winner. */
+/** Each outcome's share of the pot; resolved markets are pinned to 1 for the winner. */
 export function marketProbabilities(
-  market: Pick<MarketRow, 'status' | 'resolved_outcome_id' | 'liquidity'>,
+  market: Pick<MarketRow, 'status' | 'resolved_outcome_id'>,
   outcomes: OutcomeRow[],
 ): number[] {
   if (market.status === 'resolved') return outcomes.map((o) => (o.id === market.resolved_outcome_id ? 1 : 0));
-  return lmsrPrices(
-    outcomes.map((o) => o.shares),
-    market.liquidity,
-  );
+  return poolShares(outcomes.map((o) => o.pool));
 }
 
 const LIST_SELECT = `
   SELECT m.*,
          u.username     AS creator_username,
          u.display_name AS creator_display_name,
-         (SELECT COUNT(DISTINCT t.user_id) FROM trades t WHERE t.market_id = m.id) AS trader_count,
-         (SELECT COUNT(*) FROM comments c WHERE c.market_id = m.id)                AS comment_count,
-         (SELECT COALESCE(SUM(t.amount), 0) FROM trades t
-           WHERE t.market_id = m.id AND t.created_at > @since)                     AS volume_24h
+         (SELECT COUNT(DISTINCT b.user_id) FROM bets b WHERE b.market_id = m.id) AS bettor_count,
+         (SELECT COUNT(*) FROM comments c WHERE c.market_id = m.id)              AS comment_count,
+         (SELECT COALESCE(SUM(b.amount), 0) FROM bets b
+           WHERE b.market_id = m.id AND b.created_at > @since)                   AS pot_24h
     FROM markets m
     JOIN users u ON u.id = m.creator_id`;
 
@@ -104,12 +102,8 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
   }
 
   const prev = snapshotsAt(db, ids, now - DAY);
-  const sparkIds = rows.filter((r) => r.status === 'open' && byMarket.get(r.id)?.length === 2).map((r) => r.id);
-  const sparks = sparklines(
-    db,
-    rows.filter((r) => sparkIds.includes(r.id)),
-    now,
-  );
+  const sparkMarkets = rows.filter((r) => r.status === 'open' && byMarket.get(r.id)?.length === 2);
+  const sparks = sparklines(db, sparkMarkets, now);
 
   return rows.map((r) => {
     const outs = byMarket.get(r.id) ?? [];
@@ -119,7 +113,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       id: o.id,
       index: o.idx,
       label: o.label,
-      shares: o.shares,
+      pool: fromCents(o.pool),
       probability: probs[i] ?? 0,
       change24h: before?.[i] !== undefined && r.status === 'open' ? (probs[i] ?? 0) - before[i]! : null,
     }));
@@ -129,12 +123,11 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       category: r.category,
       status: derivedStatus(r, now),
       isBinary: outcomes.length === 2,
-      liquidity: r.liquidity,
-      volume: fromCents(r.volume),
+      pot: fromCents(r.pot),
       closeAt: r.close_at,
       createdAt: r.created_at,
       resolvedOutcomeId: r.resolved_outcome_id,
-      traderCount: r.trader_count,
+      bettorCount: r.bettor_count,
       commentCount: r.comment_count,
       creator: toUserRef({ id: r.creator_id, username: r.creator_username, display_name: r.creator_display_name }),
       outcomes,
@@ -143,7 +136,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
   });
 }
 
-/** Latest price snapshot at or before `t`, per market. */
+/** Latest probability snapshot at or before `t`, per market. */
 function snapshotsAt(db: DB, ids: number[], t: number): Map<number, number[]> {
   const rows = db
     .prepare(
@@ -200,7 +193,7 @@ function sparklines(
 }
 
 export type MarketFilter = 'active' | 'closed' | 'resolved' | 'all';
-export type MarketSort = 'trending' | 'volume' | 'new' | 'closing';
+export type MarketSort = 'trending' | 'pot' | 'new' | 'closing';
 
 export interface ListMarketsOptions {
   filter?: MarketFilter;
@@ -240,8 +233,8 @@ export function listMarkets(db: DB, now: number, opts: ListMarketsOptions = {}):
     params.creatorId = opts.creatorId;
   }
   const order = {
-    trending: 'volume_24h DESC, m.volume DESC, m.id DESC',
-    volume: 'm.volume DESC, m.id DESC',
+    trending: 'pot_24h DESC, m.pot DESC, m.id DESC',
+    pot: 'm.pot DESC, m.id DESC',
     new: 'm.id DESC',
     closing: 'm.close_at ASC, m.id DESC',
   }[opts.sort ?? 'trending'];
@@ -262,16 +255,12 @@ export function getMarketSummary(db: DB, id: number, now: number): MarketSummary
 export function getMarketDetail(db: DB, id: number, now: number): MarketDetail {
   const summary = getMarketSummary(db, id, now);
   const row = getMarketRow(db, id);
-  const resolver = row.resolved_by
-    ? (db.prepare('SELECT id, username, display_name FROM users WHERE id = ?').get(row.resolved_by) as
-        { id: number; username: string; display_name: string } | undefined)
-    : undefined;
   return {
     ...summary,
     description: row.description,
     resolvedAt: row.resolved_at,
     resolutionNote: row.resolution_note,
-    resolvedBy: resolver ? toUserRef(resolver) : null,
+    resolveBy: resolveDeadline(row),
   };
 }
 
@@ -285,34 +274,26 @@ export function recordPriceSnapshot(db: DB, marketId: number, probs: number[], n
 }
 
 export function createMarket(db: DB, creatorId: number, input: CreateMarketInput, now: number): number {
-  const liquidity = input.liquidity ?? 300;
   if (input.closeAt <= now + 5 * MINUTE) throw badRequest('截止时间至少要在 5 分钟之后');
   if (input.closeAt > now + 5 * 365 * DAY) throw badRequest('截止时间不能超过 5 年');
-  const n = input.outcomes.length;
-  const initialProbs =
-    input.initialProbability !== undefined
-      ? [input.initialProbability, 1 - input.initialProbability]
-      : Array.from({ length: n }, () => 1 / n);
-  const shares = lmsrInitialShares(initialProbs, liquidity);
-
   return db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare(
-        `INSERT INTO markets (question, description, category, creator_id, liquidity, close_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.question, input.description ?? '', input.category, creatorId, liquidity, input.closeAt, now);
+      .run(input.question, input.description ?? '', input.category, creatorId, input.closeAt, now);
     const marketId = Number(lastInsertRowid);
-    const insertOutcome = db.prepare('INSERT INTO outcomes (market_id, idx, label, shares) VALUES (?, ?, ?, ?)');
-    input.outcomes.forEach((label, i) => insertOutcome.run(marketId, i, label, shares[i]));
-    recordPriceSnapshot(db, marketId, lmsrPrices(shares, liquidity), now);
+    const insertOutcome = db.prepare('INSERT INTO outcomes (market_id, idx, label) VALUES (?, ?, ?)');
+    input.outcomes.forEach((label, i) => insertOutcome.run(marketId, i, label));
+    recordPriceSnapshot(db, marketId, poolShares(input.outcomes.map(() => 0)), now);
     return marketId;
   })();
 }
 
 export type HistoryRange = '1d' | '1w' | '1m' | 'all';
 
-/** Price history, downsampled to at most `maxPoints` and always ending at `now`. */
+/** Probability history, downsampled to at most `maxPoints` and always ending at `now`. */
 export function getPriceHistory(
   db: DB,
   marketId: number,

@@ -7,14 +7,14 @@ export function StatusBadge({ market, className }: { market: MarketSummary; clas
     return (
       <span className={clsx('inline-flex items-center gap-1.5 text-xs font-medium text-yes', className)}>
         <span className="size-1.5 animate-pulse-ring rounded-full bg-yes" />
-        交易中
+        下注中
       </span>
     );
   }
   if (market.status === 'closed') {
     return (
       <span className={clsx('inline-flex items-center gap-1 text-xs font-medium text-gold', className)}>
-        <Hourglass className="size-3.5" /> 待结算
+        <Hourglass className="size-3.5" /> 待公布
       </span>
     );
   }
@@ -28,7 +28,7 @@ export function StatusBadge({ market, className }: { market: MarketSummary; clas
   const winner = market.outcomes.find((o) => o.id === market.resolvedOutcomeId);
   return (
     <span className={clsx('inline-flex items-center gap-1 text-xs font-medium text-brand', className)}>
-      <CheckCircle2 className="size-3.5" /> 已结算{winner ? ` · ${winner.label}` : ''}
+      <CheckCircle2 className="size-3.5" /> 已公布{winner ? ` · ${winner.label}` : ''}
     </span>
   );
 }

@@ -29,7 +29,7 @@ export default function Leaderboard() {
     ) : sort === 'netWorth' ? (
       <Money value={e.stats.netWorth} />
     ) : (
-      <span>{e.stats.tradeCount} 笔</span>
+      <span>{e.stats.betCount} 笔</span>
     );
   const top = data.slice(0, 3);
   // Display order: 2nd, 1st, 3rd
@@ -52,7 +52,7 @@ export default function Leaderboard() {
         options={[
           { value: 'profit', label: '盈利' },
           { value: 'netWorth', label: '总资产' },
-          { value: 'volume', label: '交易次数' },
+          { value: 'bets', label: '下注次数' },
         ]}
       />
 
@@ -104,7 +104,7 @@ export default function Leaderboard() {
                 {e.user.displayName} {e.user.id === me?.id && <span className="text-xs text-brand">（你）</span>}
               </div>
               <div className="text-xs text-faint">
-                {e.stats.tradeCount} 笔交易 · {e.stats.marketsTraded} 个市场
+                {e.stats.betCount} 笔下注 · {e.stats.marketsBet} 个市场
               </div>
             </div>
             <div className="text-right font-mono">{metric(e)}</div>

@@ -2,7 +2,6 @@ import { createBrowserRouter } from 'react-router';
 import { Layout } from './components/Layout';
 import { RequireAuth } from './components/RequireAuth';
 import { RouteError } from './components/RouteError';
-import Admin from './pages/Admin';
 import CreateMarket from './pages/CreateMarket';
 import Home from './pages/Home';
 import Leaderboard from './pages/Leaderboard';
@@ -32,10 +31,6 @@ export const router = createBrowserRouter(
             { path: '/portfolio', element: <PortfolioPage /> },
             { path: '/settings', element: <SettingsPage /> },
           ],
-        },
-        {
-          element: <RequireAuth admin />,
-          children: [{ path: '/admin', element: <Admin /> }],
         },
         { path: '*', element: <NotFound /> },
       ],

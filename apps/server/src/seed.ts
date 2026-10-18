@@ -4,12 +4,11 @@
  *   pnpm seed --reset    # deletes the database file first
  */
 import { existsSync, rmSync } from 'node:fs';
-import { SHARE_EPSILON } from '@watercooler/shared';
 import { loadConfig, loadDotEnv } from './config';
 import { openDatabase } from './db';
+import { cancelMarket, placeBet, resolveMarket } from './services/bets';
 import { addComment } from './services/comments';
-import { createMarket, getOutcomeRows, marketProbabilities } from './services/markets';
-import { cancelMarket, executeTrade, resolveMarket } from './services/trading';
+import { createMarket, getOutcomeRows } from './services/markets';
 import { createUser } from './services/users';
 import { DAY, HOUR } from './lib/time';
 
@@ -40,7 +39,6 @@ const now = Date.now();
 const start = now - 21 * DAY;
 
 const people = [
-  ['admin', '管理员'],
   ['xiaoming', '小明'],
   ['lili', '莉莉'],
   ['dawei', '大伟'],
@@ -52,16 +50,9 @@ const people = [
 
 const userIds: number[] = [];
 for (const [username, displayName] of people) {
-  const user = await createUser(
-    db,
-    config,
-    { username, displayName, password: username === 'admin' ? 'admin123' : 'demo123' },
-    start,
-  );
+  const user = await createUser(db, config, { username, displayName, password: 'demo123' }, start);
   userIds.push(user.id);
 }
-const adminId = userIds[0]!;
-const players = userIds.slice(1);
 
 interface Spec {
   question: string;
@@ -70,10 +61,9 @@ interface Spec {
   outcomes: string[];
   createdDaysAgo: number;
   closeInDays: number;
-  /** Where the "true" probabilities drift towards, steering simulated traders. */
+  /** How likely each outcome looks to the crowd; simulated bettors pick outcomes with these odds. */
   target: number[];
-  trades: number;
-  liquidity?: number;
+  bets: number;
   resolveTo?: number;
   cancel?: boolean;
   comments?: string[];
@@ -88,7 +78,7 @@ const specs: Spec[] = [
     createdDaysAgo: 4,
     closeInDays: 2,
     target: [0.72, 0.28],
-    trades: 70,
+    bets: 70,
     comments: ['上周就是奶茶，这周大概率换咖啡', '行政小姐姐说在比价了', '梭哈「是」'],
   },
   {
@@ -99,8 +89,7 @@ const specs: Spec[] = [
     createdDaysAgo: 20,
     closeInDays: 75,
     target: [0.34, 0.66],
-    trades: 90,
-    liquidity: 1000,
+    bets: 90,
     comments: ['因子说不行', '这是 alpha 还是 beta？'],
   },
   {
@@ -111,7 +100,7 @@ const specs: Spec[] = [
     createdDaysAgo: 12,
     closeInDays: 20,
     target: [0.38, 0.3, 0.12, 0.2],
-    trades: 60,
+    bets: 60,
     comments: ['楼下烧烤才是永远的神', '千岛湖去过了吧？'],
   },
   {
@@ -122,7 +111,7 @@ const specs: Spec[] = [
     createdDaysAgo: 15,
     closeInDays: 200,
     target: [0.32, 0.18, 0.14, 0.16, 0.2],
-    trades: 50,
+    bets: 50,
   },
   {
     question: '下周一 9:30 前到公司的人会超过一半吗？',
@@ -132,8 +121,7 @@ const specs: Spec[] = [
     createdDaysAgo: 2,
     closeInDays: 4,
     target: [0.41, 0.59],
-    trades: 25,
-    liquidity: 100,
+    bets: 25,
   },
   {
     question: '比特币年底前会突破 15 万美元吗？',
@@ -143,7 +131,7 @@ const specs: Spec[] = [
     createdDaysAgo: 18,
     closeInDays: 76,
     target: [0.22, 0.78],
-    trades: 55,
+    bets: 55,
   },
   {
     question: '中秋礼盒会发什么？',
@@ -153,7 +141,7 @@ const specs: Spec[] = [
     createdDaysAgo: 19,
     closeInDays: -6,
     target: [0.55, 0.25, 0.1, 0.1],
-    trades: 40,
+    bets: 40,
     resolveTo: 1,
     comments: ['大闸蟹！！！', '我就说吧'],
   },
@@ -165,7 +153,7 @@ const specs: Spec[] = [
     createdDaysAgo: 9,
     closeInDays: -2,
     target: [0.8, 0.2],
-    trades: 30,
+    bets: 30,
   },
   {
     question: '咖啡机这个月会修好吗？',
@@ -175,7 +163,7 @@ const specs: Spec[] = [
     createdDaysAgo: 10,
     closeInDays: -1,
     target: [0.5, 0.5],
-    trades: 12,
+    bets: 12,
     cancel: true,
   },
   {
@@ -186,92 +174,82 @@ const specs: Spec[] = [
     createdDaysAgo: 1,
     closeInDays: 60,
     target: [0.6, 0.4],
-    trades: 8,
+    bets: 8,
   },
 ];
 
 interface Created {
   spec: Spec;
   marketId: number;
+  creatorId: number;
   createdAt: number;
   closeAt: number;
-  tradingEnd: number;
+  bettingEnd: number;
 }
 
 const created: Created[] = specs.map((spec) => {
   const createdAt = now - spec.createdDaysAgo * DAY;
   const closeAt = now + spec.closeInDays * DAY;
+  const creatorId = pick(userIds);
   const marketId = createMarket(
     db,
-    pick(userIds),
+    creatorId,
     {
       question: spec.question,
       description: spec.description,
       category: spec.category,
       outcomes: spec.outcomes,
       closeAt,
-      liquidity: spec.liquidity ?? 300,
     },
     createdAt,
   );
-  return { spec, marketId, createdAt, closeAt, tradingEnd: Math.min(closeAt, now) - HOUR };
+  return { spec, marketId, creatorId, createdAt, closeAt, bettingEnd: Math.min(closeAt, now) - HOUR };
 });
 
-// Interleave every market's trades in time order so nobody blows their budget on the first market.
+// Interleave every market's bets in time order so nobody blows their budget on the first market.
 const events = created
   .flatMap((m) =>
-    Array.from({ length: m.spec.trades }, () => ({ m, t: m.createdAt + rand() * (m.tradingEnd - m.createdAt) })),
+    Array.from({ length: m.spec.bets }, () => ({ m, t: m.createdAt + rand() * (m.bettingEnd - m.createdAt) })),
   )
   .sort((a, b) => a.t - b.t);
 
 for (const { m, t } of events) {
-  const userId = pick(players);
+  const bettor = pick(userIds.filter((id) => id !== m.creatorId));
   const outcomes = getOutcomeRows(db, m.marketId);
-  const prices = marketProbabilities(
-    { status: 'open', resolved_outcome_id: null, liquidity: m.spec.liquidity ?? 300 },
-    outcomes,
-  );
-  // Each trader has a noisy belief around the target and trades towards it.
-  const i = Math.floor(rand() * outcomes.length);
-  const outcome = outcomes[i]!;
-  const belief = m.spec.target[i]! + (rand() - 0.5) * 0.25;
-  const edge = belief - prices[i]!;
-  const held = db
-    .prepare('SELECT shares FROM positions WHERE user_id = ? AND outcome_id = ?')
-    .get(userId, outcome.id) as { shares: number } | undefined;
+  // Back an outcome with the crowd's odds, staking a random amount.
+  let r = rand();
+  let i = 0;
+  while (i < outcomes.length - 1 && r >= m.spec.target[i]!) r -= m.spec.target[i++]!;
+  const amount = Math.round(3 + rand() * rand() * 40);
   try {
-    if (edge > 0.02) {
-      const amount = Math.round(5 + Math.min(edge, 0.4) * 400 * rand());
-      executeTrade(db, userId, m.marketId, { side: 'buy', outcomeId: outcome.id, amount }, t);
-    } else if (held && held.shares > SHARE_EPSILON) {
-      executeTrade(
-        db,
-        userId,
-        m.marketId,
-        { side: 'sell', outcomeId: outcome.id, shares: held.shares * (0.3 + rand() * 0.7) },
-        t,
-      );
-    }
+    placeBet(db, bettor, m.marketId, { outcomeId: outcomes[i]!.id, amount }, t);
   } catch {
-    // e.g. out of money — just skip this simulated trade
+    // e.g. out of money — just skip this simulated bet
   }
 }
 
 for (const m of created) {
   for (const body of m.spec.comments ?? []) {
-    addComment(db, m.marketId, pick(players), body, m.createdAt + rand() * (m.tradingEnd - m.createdAt));
+    addComment(db, m.marketId, pick(userIds), body, m.createdAt + rand() * (m.bettingEnd - m.createdAt));
   }
   const outcomes = getOutcomeRows(db, m.marketId);
   if (m.spec.resolveTo !== undefined) {
-    resolveMarket(db, m.marketId, outcomes[m.spec.resolveTo]!.id, adminId, '已按实际发放结果结算', m.closeAt + HOUR);
+    resolveMarket(
+      db,
+      m.marketId,
+      outcomes[m.spec.resolveTo]!.id,
+      m.creatorId,
+      '已按实际发放结果结算',
+      m.closeAt + HOUR,
+    );
   } else if (m.spec.cancel) {
-    cancelMarket(db, m.marketId, adminId, '题目里的「这个月」有歧义，取消重开', m.closeAt + HOUR);
+    cancelMarket(db, m.marketId, m.creatorId, '题目里的「这个月」有歧义，取消重开', m.closeAt + HOUR);
   }
 }
 
 const counts = db
-  .prepare('SELECT (SELECT COUNT(*) FROM markets) AS markets, (SELECT COUNT(*) FROM trades) AS trades')
-  .get() as { markets: number; trades: number };
-console.log(`✅ 已生成 ${people.length} 个用户、${counts.markets} 个市场、${counts.trades} 笔交易`);
-console.log('   管理员: admin / admin123    其他用户: xiaoming、lili… / demo123');
+  .prepare('SELECT (SELECT COUNT(*) FROM markets) AS markets, (SELECT COUNT(*) FROM bets) AS bets')
+  .get() as { markets: number; bets: number };
+console.log(`✅ 已生成 ${people.length} 个用户、${counts.markets} 个市场、${counts.bets} 笔下注`);
+console.log('   演示账号: xiaoming、lili、dawei… 密码都是 demo123');
 db.close();

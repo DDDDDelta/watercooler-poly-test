@@ -38,6 +38,6 @@ export function addComment(db: DB, marketId: number, userId: number, body: strin
 export function deleteComment(db: DB, commentId: number, actor: UserRow): void {
   const row = db.prepare('SELECT user_id FROM comments WHERE id = ?').get(commentId) as { user_id: number } | undefined;
   if (!row) throw notFound('评论不存在');
-  if (row.user_id !== actor.id && actor.role !== 'admin') throw forbidden();
+  if (row.user_id !== actor.id) throw forbidden('只能删除自己的评论');
   db.prepare('DELETE FROM comments WHERE id = ?').run(commentId);
 }

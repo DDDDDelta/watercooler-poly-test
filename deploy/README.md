@@ -51,7 +51,6 @@ nvm alias default 22
 mkdir -p ~/gang-bet/shared
 tee ~/gang-bet/shared/.env <<'CONF'
 INVITE_CODE=换成你的邀请码
-# ADMIN_USERNAMES=你的用户名
 # PRIVATE_MODE=true
 CONF
 ```
@@ -63,7 +62,7 @@ CONF
 - nvm 是按用户安装的，必须装在 `DEPLOY_USER` 这个账号下。
 - 服务器要能访问 npm 仓库来安装依赖。`better-sqlite3` 会从 GitHub 下载预编译文件，下载失败时会从源码编译，需要 `python3`、`make`、`g++`（`sudo apt install -y build-essential python3`）。
 - 每个实例的端口（3000、3001）不能被别的程序占用。
-- 每个实例**第一个注册的用户自动成为管理员**，新实例上线后自己先去注册。
+- 网站里没有管理员：市场由发起人自己公布结果。忘记密码只能由站长在服务器上重置（见下面的日常运维）。
 - 如果发现 SSH 断开后进程被杀（`/etc/systemd/logind.conf` 里 `KillUserProcesses=yes`），执行 `sudo loginctl enable-linger <部署用户>`。Ubuntu 默认不会杀。
 
 ## 二、SSH 密钥
@@ -140,7 +139,7 @@ location /gang-bet/ {
 
 1. 在 `deploy.yml` 的 `matrix.include` 里加一项：`instance`（目录名）、`base_path`、`port`（没被占用的端口）、`site_name`、`site_copy`（[`site-copy.ts`](../apps/web/src/lib/site-copy.ts) 里的一套文案，也可以在那里新加一套）
 2. 服务器上：nginx 加一组 `location`（同上），crontab 加一行 `@reboot $HOME/<实例>/<实例>.sh start`
-3. 推送到 `main`，自己先去注册（第一个用户是管理员）
+3. 推送到 `main`
 
 ## 六、日常运维
 
@@ -152,12 +151,14 @@ location /gang-bet/ {
 ~/gang-bet/gang-bet.sh restart     # 重启（也有 start / stop）
 ls ~/gang-bet/releases             # 已部署的版本
 
-# 手动回滚到某个版本
+# 有人忘记密码：重置后这个账号会在所有设备上退出登录
+~/gang-bet/gang-bet.sh reset-password <用户名> <新密码>
+
+# 手动回滚到某个版本（注意：数据库结构升级过的话，不能回滚到升级之前的版本，
+# 比如改成奖池模式之前的版本）
 ln -sfn ~/gang-bet/releases/<版本> ~/gang-bet/current
 ~/gang-bet/gang-bet.sh restart
 
 # 备份数据库（WAL 模式，不要直接复制 db 文件）
 sqlite3 ~/gang-bet/shared/data/gang-bet.db ".backup '$HOME/gang-bet/shared/backup-$(date +%F).db'"
 ```
-
-也可以在 `shared/.env` 里用 `ADMIN_USERNAMES` 指定管理员。

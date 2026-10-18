@@ -18,6 +18,9 @@ export function formatPct(p: number): string {
 
 export const formatPct1 = (p: number) => `${(p * 100).toFixed(1)}%`;
 
+/** Payout per unit staked, e.g. ×2.35. */
+export const formatMultiplier = (m: number) => `×${m.toFixed(2)}`;
+
 export function formatSigned(n: number, digits = 2): string {
   const abs = Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const threshold = 0.5 * 10 ** -digits;

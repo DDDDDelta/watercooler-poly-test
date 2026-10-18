@@ -1,23 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import clsx from 'clsx';
-import { CalendarDays, Shield } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { Avatar } from '../components/Avatar';
 import { MarketCard } from '../components/MarketCard';
 import { Money } from '../components/Money';
-import { PositionsTable } from '../components/PositionsTable';
+import { BetsTable } from '../components/BetsTable';
 import { Card, Empty, PageLoader, Segmented, Stat } from '../components/ui';
 import { api } from '../lib/api';
-import { formatDay, formatRelative, formatShares } from '../lib/format';
+import { formatDay, formatRelative } from '../lib/format';
 
 export default function Profile() {
   const id = Number(useParams().id);
-  const [tab, setTab] = useState<'positions' | 'trades' | 'markets'>('positions');
+  const [tab, setTab] = useState<'bets' | 'history' | 'markets'>('bets');
   const { data, error } = useQuery({ queryKey: ['user', id], queryFn: () => api.user(id) });
   if (error) return <Empty title="用户不存在" />;
   if (!data) return <PageLoader />;
-  const { user, stats, rank, positions, trades, createdMarkets } = data;
+  const { user, stats, rank, bets, recentBets, createdMarkets } = data;
 
   return (
     <div>
@@ -27,14 +26,7 @@ export default function Profile() {
             <Avatar id={user.id} name={user.displayName} size={84} className="ring-[3px] ring-panel" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="flex items-center gap-2 section-title">
-              {user.displayName}
-              {user.role === 'admin' && (
-                <span className="inline-flex items-center gap-1 rounded bg-gold/10 px-2 py-0.5 text-xs font-normal text-gold">
-                  <Shield className="size-3" /> 管理员
-                </span>
-              )}
-            </h1>
+            <h1 className="flex items-center gap-2 section-title">{user.displayName}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-dim">
               <span>@{user.username}</span>
               <span className="inline-flex items-center gap-1">
@@ -58,8 +50,8 @@ export default function Profile() {
             <Money value={stats.profit} signed />
           </span>
         </Stat>
-        <Stat label="交易次数">{stats.tradeCount}</Stat>
-        <Stat label="参与市场">{stats.marketsTraded}</Stat>
+        <Stat label="下注次数">{stats.betCount}</Stat>
+        <Stat label="参与市场">{stats.marketsBet}</Stat>
       </div>
 
       <Card className="mt-6 p-5">
@@ -68,37 +60,30 @@ export default function Profile() {
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'positions', label: '持仓' },
-            { value: 'trades', label: '交易记录' },
+            { value: 'bets', label: '下注' },
+            { value: 'history', label: '下注记录' },
             { value: 'markets', label: `发起的市场 ${createdMarkets.length || ''}` },
           ]}
         />
         <div className="mt-4">
-          {tab === 'positions' && <PositionsTable positions={positions} empty="暂无持仓" />}
-          {tab === 'trades' &&
-            (trades.length === 0 ? (
-              <Empty title="还没有交易" />
+          {tab === 'bets' && <BetsTable bets={bets} empty="暂无下注" />}
+          {tab === 'history' &&
+            (recentBets.length === 0 ? (
+              <Empty title="还没有下注" />
             ) : (
               <ul className="divide-y divide-line">
-                {trades.map((t) => (
-                  <li key={t.id} className="flex items-center gap-3 py-3 text-sm">
-                    <span
-                      className={clsx(
-                        'rounded-md px-2 py-0.5 text-xs font-semibold',
-                        t.side === 'buy' ? 'bg-yes/10 text-yes' : 'bg-no/10 text-no',
-                      )}
-                    >
-                      {t.side === 'buy' ? '买入' : '卖出'}
-                    </span>
+                {recentBets.map((b) => (
+                  <li key={b.id} className="flex items-center gap-3 py-3 text-sm">
+                    <span className="rounded-md bg-brand-light px-2 py-0.5 text-xs font-semibold text-brand">押</span>
                     <div className="min-w-0 flex-1">
-                      <Link to={`/market/${t.marketId}`} className="line-clamp-1 hover:underline">
-                        {t.marketQuestion}
+                      <Link to={`/market/${b.marketId}`} className="line-clamp-1 hover:underline">
+                        {b.marketQuestion}
                       </Link>
                       <div className="text-xs text-faint">
-                        {formatShares(t.shares)} 份「{t.outcomeLabel}」 · {formatRelative(t.createdAt)}
+                        「{b.outcomeLabel}」 · {formatRelative(b.createdAt)}
                       </div>
                     </div>
-                    <Money value={t.amount} className="font-mono" />
+                    <Money value={b.amount} className="font-mono" />
                   </li>
                 ))}
               </ul>

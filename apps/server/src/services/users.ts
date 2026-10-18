@@ -1,4 +1,4 @@
-import { fromCents, type LedgerKind, type Me, type PublicUser, type Role, type UserRef } from '@watercooler/shared';
+import { fromCents, type LedgerKind, type Me, type PublicUser, type UserRef } from '@watercooler/shared';
 import type { Config } from '../config';
 import type { DB } from '../db';
 import { badRequest, conflict } from '../lib/http';
@@ -10,7 +10,6 @@ export interface UserRow {
   username: string;
   display_name: string;
   password_hash: string;
-  role: Role;
   balance: number;
   last_bonus_date: string | null;
   created_at: number;
@@ -24,7 +23,6 @@ export const toUserRef = (u: Pick<UserRow, 'id' | 'username' | 'display_name'>):
 
 export const toPublicUser = (u: UserRow): PublicUser => ({
   ...toUserRef(u),
-  role: u.role,
   createdAt: u.created_at,
 });
 
@@ -85,11 +83,9 @@ export async function createUser(
   return db.transaction(() => {
     // Re-check inside the transaction: hashing is async, another request may have won the race.
     if (getUserByUsername(db, input.username)) throw conflict('用户名已被占用');
-    const isFirstUser = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n === 0;
-    const role: Role = isFirstUser || config.adminUsernames.includes(input.username.toLowerCase()) ? 'admin' : 'user';
     const { lastInsertRowid } = db
-      .prepare('INSERT INTO users (username, display_name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(input.username, input.displayName, passwordHash, role, now);
+      .prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)')
+      .run(input.username, input.displayName, passwordHash, now);
     const id = Number(lastInsertRowid);
     const starting = Math.round(config.startingBalance * 100);
     if (starting > 0) adjustBalance(db, id, starting, 'signup', now, { note: '注册奖励' });

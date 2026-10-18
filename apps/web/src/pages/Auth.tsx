@@ -88,7 +88,7 @@ export function Login() {
           注册一个
         </Link>
       </p>
-      <p className="mt-2 text-center text-xs text-faint">忘记密码请找管理员重置</p>
+      <p className="mt-2 text-center text-xs text-faint">忘记密码请联系站长重置</p>
     </AuthShell>
   );
 }
@@ -147,7 +147,7 @@ export function Register() {
           />
         </Field>
         {config?.inviteRequired && (
-          <Field label="邀请码" hint="问问管理员要">
+          <Field label="邀请码" hint="问问拉你进来的人">
             <Input value={form.inviteCode} onChange={set('inviteCode')} required />
           </Field>
         )}

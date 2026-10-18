@@ -26,7 +26,6 @@ export function authRoutes({ db, config, now }: AppDeps) {
       inviteRequired: config.inviteCode !== null,
       startingBalance: config.startingBalance,
       dailyBonus: config.dailyBonus,
-      allowUserMarkets: config.allowUserMarkets,
       privateMode: config.privateMode,
     }),
   );

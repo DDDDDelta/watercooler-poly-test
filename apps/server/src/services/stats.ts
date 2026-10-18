@@ -1,13 +1,11 @@
 import {
   fromCents,
-  lmsrPrices,
   round2,
-  SHARE_EPSILON,
   type LeaderboardEntry,
   type LedgerEntry,
   type LedgerKind,
-  type PortfolioPosition,
-  type PortfolioPositionState,
+  type PortfolioBet,
+  type PortfolioState,
   type SiteStats,
   type UserStats,
 } from '@watercooler/shared';
@@ -15,62 +13,35 @@ import type { DB } from '../db';
 import { derivedStatus, type MarketRow } from './markets';
 import { toUserRef } from './users';
 
-/** outcome id -> current price, for every market that is still open. */
-function openOutcomePrices(db: DB): Map<number, number> {
-  const rows = db
-    .prepare(
-      `SELECT o.id, o.market_id, o.shares, m.liquidity
-         FROM outcomes o JOIN markets m ON m.id = o.market_id
-        WHERE m.status = 'open'
-        ORDER BY o.market_id, o.idx`,
-    )
-    .all() as { id: number; market_id: number; shares: number; liquidity: number }[];
-  const prices = new Map<number, number>();
-  let i = 0;
-  while (i < rows.length) {
-    let j = i;
-    while (j < rows.length && rows[j]!.market_id === rows[i]!.market_id) j++;
-    const group = rows.slice(i, j);
-    const p = lmsrPrices(
-      group.map((r) => r.shares),
-      group[0]!.liquidity,
-    );
-    group.forEach((r, k) => prices.set(r.id, p[k]!));
-    i = j;
-  }
-  return prices;
-}
-
 /** Stats for every user at once (cheap enough for an office-sized crowd). */
 export function computeAllStats(db: DB): Map<number, UserStats> {
-  const prices = openOutcomePrices(db);
   const users = db.prepare('SELECT id, balance FROM users').all() as { id: number; balance: number }[];
   const stats = new Map<number, UserStats>();
   for (const u of users) {
     stats.set(u.id, {
       balance: fromCents(u.balance),
-      positionsValue: 0,
+      staked: 0,
       netWorth: 0,
       funded: 0,
       profit: 0,
-      tradeCount: 0,
-      marketsTraded: 0,
+      betCount: 0,
+      marketsBet: 0,
     });
   }
 
-  const positions = db
-    .prepare('SELECT user_id, outcome_id, shares FROM positions WHERE shares > ?')
-    .all(SHARE_EPSILON) as { user_id: number; outcome_id: number; shares: number }[];
-  for (const p of positions) {
-    const price = prices.get(p.outcome_id);
-    const s = stats.get(p.user_id);
-    if (price !== undefined && s) s.positionsValue += p.shares * price;
+  const staked = db
+    .prepare(
+      `SELECT b.user_id, SUM(b.amount) AS total FROM bets b JOIN markets m ON m.id = b.market_id
+        WHERE m.status = 'open' GROUP BY b.user_id`,
+    )
+    .all() as { user_id: number; total: number }[];
+  for (const r of staked) {
+    const s = stats.get(r.user_id);
+    if (s) s.staked = fromCents(r.total);
   }
 
   const funded = db
-    .prepare(
-      `SELECT user_id, SUM(amount) AS total FROM ledger WHERE kind IN ('signup', 'bonus', 'grant') GROUP BY user_id`,
-    )
+    .prepare(`SELECT user_id, SUM(amount) AS total FROM ledger WHERE kind IN ('signup', 'bonus') GROUP BY user_id`)
     .all() as { user_id: number; total: number }[];
   for (const f of funded) {
     const s = stats.get(f.user_id);
@@ -78,25 +49,24 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
   }
 
   const activity = db
-    .prepare('SELECT user_id, COUNT(*) AS trades, COUNT(DISTINCT market_id) AS markets FROM trades GROUP BY user_id')
-    .all() as { user_id: number; trades: number; markets: number }[];
+    .prepare('SELECT user_id, COUNT(*) AS bets, COUNT(DISTINCT market_id) AS markets FROM bets GROUP BY user_id')
+    .all() as { user_id: number; bets: number; markets: number }[];
   for (const a of activity) {
     const s = stats.get(a.user_id);
     if (s) {
-      s.tradeCount = a.trades;
-      s.marketsTraded = a.markets;
+      s.betCount = a.bets;
+      s.marketsBet = a.markets;
     }
   }
 
   for (const s of stats.values()) {
-    s.positionsValue = round2(s.positionsValue);
-    s.netWorth = round2(s.balance + s.positionsValue);
+    s.netWorth = round2(s.balance + s.staked);
     s.profit = round2(s.netWorth - s.funded);
   }
   return stats;
 }
 
-export type LeaderboardSort = 'profit' | 'netWorth' | 'volume';
+export type LeaderboardSort = 'profit' | 'netWorth' | 'bets';
 
 export function leaderboard(db: DB, sort: LeaderboardSort = 'profit'): LeaderboardEntry[] {
   const stats = computeAllStats(db);
@@ -105,7 +75,7 @@ export function leaderboard(db: DB, sort: LeaderboardSort = 'profit'): Leaderboa
     username: string;
     display_name: string;
   }[];
-  const key = (s: UserStats) => (sort === 'netWorth' ? s.netWorth : sort === 'volume' ? s.tradeCount : s.profit);
+  const key = (s: UserStats) => (sort === 'netWorth' ? s.netWorth : sort === 'bets' ? s.betCount : s.profit);
   return users
     .map((u) => ({ user: toUserRef(u), stats: stats.get(u.id)! }))
     .sort((a, b) => key(b.stats) - key(a.stats) || b.stats.netWorth - a.stats.netWorth || a.user.id - b.user.id)
@@ -119,52 +89,63 @@ export function userStatsAndRank(db: DB, userId: number): { stats: UserStats; ra
   return { stats: entry.stats, rank: entry.rank };
 }
 
-/** All positions of a user, live ones first, with valuation and P&L. */
-export function userPositions(db: DB, userId: number, now: number): PortfolioPosition[] {
+/** All of a user's stakes, one row per outcome backed, live markets first. */
+export function userBets(db: DB, userId: number, now: number): PortfolioBet[] {
   const rows = db
     .prepare(
-      `SELECT p.outcome_id, p.shares, p.cost, o.label, o.market_id,
-              m.question, m.status, m.close_at, m.resolved_outcome_id, m.liquidity,
-              (SELECT COUNT(*) FROM outcomes x WHERE x.market_id = m.id) AS outcome_count
-         FROM positions p
-         JOIN outcomes o ON o.id = p.outcome_id
-         JOIN markets m  ON m.id = p.market_id
-        WHERE p.user_id = ? AND p.shares > ?
-        ORDER BY (m.status = 'open') DESC, m.close_at ASC`,
+      `SELECT b.outcome_id, SUM(b.amount) AS stake, o.label, o.pool, b.market_id,
+              m.question, m.status, m.close_at, m.resolved_outcome_id, m.pot,
+              (SELECT w.pool FROM outcomes w WHERE w.id = m.resolved_outcome_id) AS winner_pool,
+              (SELECT COUNT(*) FROM outcomes x WHERE x.market_id = m.id)         AS outcome_count
+         FROM bets b
+         JOIN outcomes o ON o.id = b.outcome_id
+         JOIN markets m  ON m.id = b.market_id
+        WHERE b.user_id = ?
+        GROUP BY b.outcome_id
+        ORDER BY (m.status = 'open') DESC, m.close_at ASC, b.outcome_id`,
     )
-    .all(userId, SHARE_EPSILON) as {
+    .all(userId) as {
     outcome_id: number;
-    shares: number;
-    cost: number;
+    stake: number;
     label: string;
+    pool: number;
     market_id: number;
     question: string;
     status: MarketRow['status'];
     close_at: number;
     resolved_outcome_id: number | null;
-    liquidity: number;
+    pot: number;
+    winner_pool: number | null;
     outcome_count: number;
   }[];
-  const prices = openOutcomePrices(db);
+  const paid = new Map(
+    (
+      db
+        .prepare(
+          `SELECT market_id, SUM(amount) AS total FROM ledger WHERE user_id = ? AND kind = 'payout' GROUP BY market_id`,
+        )
+        .all(userId) as { market_id: number; total: number }[]
+    ).map((r) => [r.market_id, r.total]),
+  );
 
   return rows.map((r) => {
-    const cost = fromCents(r.cost);
-    let price: number;
-    let value: number;
-    let state: PortfolioPositionState;
-    if (r.status === 'resolved') {
-      const won = r.resolved_outcome_id === r.outcome_id;
-      price = won ? 1 : 0;
-      value = won ? r.shares : 0;
-      state = won ? 'won' : 'lost';
-    } else if (r.status === 'cancelled') {
-      price = r.shares > 0 ? cost / r.shares : 0;
-      value = cost;
-      state = 'refunded';
-    } else {
-      price = prices.get(r.outcome_id) ?? 0;
-      value = r.shares * price;
+    const stake = fromCents(r.stake);
+    let payout: number;
+    let state: PortfolioState;
+    if (r.status === 'open') {
+      // If it won now: this stake's share of its outcome's pool, times the whole pot.
+      payout = fromCents((r.stake / r.pool) * r.pot);
       state = 'active';
+    } else if (r.status === 'cancelled' || !r.winner_pool) {
+      // Cancelled, or nobody backed the winner: every stake was refunded.
+      payout = stake;
+      state = 'refunded';
+    } else if (r.resolved_outcome_id === r.outcome_id) {
+      payout = fromCents(paid.get(r.market_id) ?? 0);
+      state = 'won';
+    } else {
+      payout = 0;
+      state = 'lost';
     }
     return {
       market: {
@@ -177,12 +158,9 @@ export function userPositions(db: DB, userId: number, now: number): PortfolioPos
       },
       outcomeId: r.outcome_id,
       outcomeLabel: r.label,
-      shares: r.shares,
-      cost,
-      avgPrice: r.shares > 0 ? cost / r.shares : 0,
-      price,
-      value: round2(value),
-      pnl: round2(value - cost),
+      stake,
+      payout: round2(payout),
+      pnl: state === 'active' ? null : round2(payout - stake),
       state,
     };
   });
@@ -222,15 +200,15 @@ export function siteStats(db: DB, now: number): SiteStats {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM markets WHERE status = 'open' AND close_at > ?) AS open_markets,
-         (SELECT COALESCE(SUM(volume), 0) FROM markets)                       AS total_volume,
-         (SELECT COUNT(DISTINCT user_id) FROM trades)                          AS traders,
+         (SELECT COALESCE(SUM(pot), 0) FROM markets)                          AS total_staked,
+         (SELECT COUNT(DISTINCT user_id) FROM bets)                            AS bettors,
          (SELECT COUNT(*) FROM users)                                          AS users`,
     )
-    .get(now) as { open_markets: number; total_volume: number; traders: number; users: number };
+    .get(now) as { open_markets: number; total_staked: number; bettors: number; users: number };
   return {
     openMarkets: row.open_markets,
-    totalVolume: fromCents(row.total_volume),
-    traders: row.traders,
+    totalStaked: fromCents(row.total_staked),
+    bettors: row.bettors,
     users: row.users,
   };
 }

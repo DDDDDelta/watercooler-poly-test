@@ -16,10 +16,6 @@ export interface Config {
   startingBalance: number;
   /** Currency a user can claim once per day. 0 disables it. */
   dailyBonus: number;
-  /** Usernames that become admins on registration (the first user always does). */
-  adminUsernames: string[];
-  /** Whether non-admin users may create markets. */
-  allowUserMarkets: boolean;
   /** Require login to see anything at all (otherwise browsing is public, like Polymarket). */
   privateMode: boolean;
   /** Timezone used to decide what "today" means for the daily bonus. */
@@ -71,11 +67,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     inviteCode: env.INVITE_CODE?.trim() || null,
     startingBalance: num(env.STARTING_BALANCE, 1000),
     dailyBonus: num(env.DAILY_BONUS, 100),
-    adminUsernames: (env.ADMIN_USERNAMES ?? '')
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean),
-    allowUserMarkets: bool(env.ALLOW_USER_MARKETS, true),
     privateMode: bool(env.PRIVATE_MODE, false),
     timezone: env.APP_TIMEZONE || 'Asia/Shanghai',
     staticDir,

@@ -10,7 +10,6 @@ import {
   Moon,
   Plus,
   Settings,
-  Shield,
   Sun,
   Trophy,
   User as UserIcon,
@@ -21,7 +20,6 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react
 import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useConfig, useMe, useSetMe } from '../lib/auth';
-import { formatPct } from '../lib/format';
 import { COPY, SITE_NAME } from '../lib/site';
 import { setTheme, useTheme } from '../lib/theme';
 import { Avatar } from './Avatar';
@@ -141,9 +139,8 @@ function UserMenu() {
 
   const items = [
     { to: `/u/${me.id}`, icon: UserIcon, label: '个人主页' },
-    { to: '/portfolio', icon: Wallet, label: '我的持仓' },
+    { to: '/portfolio', icon: Wallet, label: '我的下注' },
     { to: '/settings', icon: Settings, label: '账号设置' },
-    ...(me.role === 'admin' ? [{ to: '/admin', icon: Shield, label: '管理后台' }] : []),
   ];
 
   return (
@@ -195,7 +192,7 @@ function Navbar() {
         <nav className="hidden items-center md:flex">
           <NavItem to="/">市场</NavItem>
           <NavItem to="/leaderboard">排行榜</NavItem>
-          {me && <NavItem to="/portfolio">持仓</NavItem>}
+          {me && <NavItem to="/portfolio">我的下注</NavItem>}
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
@@ -234,7 +231,7 @@ function Navbar() {
   );
 }
 
-/** Scrolling tape of the latest trades across all markets. */
+/** Scrolling tape of the latest bets across all markets. */
 function Ticker() {
   const { data } = useQuery({ queryKey: ['activity'], queryFn: () => api.activity(24), refetchInterval: 15_000 });
   if (!data || data.length === 0) return null;
@@ -245,11 +242,10 @@ function Ticker() {
       className="flex shrink-0 items-center gap-2 px-5 text-xs text-dim transition hover:text-fg"
     >
       <span className="text-fg">{t.user.displayName}</span>
-      <span className={t.side === 'buy' ? 'text-yes' : 'text-no'}>{t.side === 'buy' ? '买入' : '卖出'}</span>
+      <Money value={t.amount} className="font-mono text-fg" />
+      <span>押</span>
       <span className="rounded-sm bg-brand-light px-1.5 py-0.5 text-brand">{t.outcomeLabel}</span>
       <span className="max-w-56 truncate">{t.marketQuestion}</span>
-      <Money value={t.amount} className="font-mono text-fg" />
-      <span className="font-mono text-faint">@ {formatPct(t.priceAfter)}</span>
       <span className="text-line">|</span>
     </Link>
   ));
@@ -276,7 +272,7 @@ function MobileNav() {
     { to: '/', icon: LayoutGrid, label: '市场' },
     { to: '/leaderboard', icon: Trophy, label: '排行' },
     { to: me ? '/create' : '/login', icon: Plus, label: '创建', primary: true },
-    { to: me ? '/portfolio' : '/login', icon: BarChart3, label: '持仓' },
+    { to: me ? '/portfolio' : '/login', icon: BarChart3, label: '下注' },
     { to: me ? `/u/${me.id}` : '/login', icon: UserIcon, label: '我的' },
   ];
   return (
@@ -358,7 +354,7 @@ function Footer() {
       title: '我的',
       links: me
         ? [
-            { to: '/portfolio', label: '我的持仓' },
+            { to: '/portfolio', label: '我的下注' },
             { to: '/settings', label: '账号设置' },
           ]
         : [
@@ -373,7 +369,7 @@ function Footer() {
         <div className="max-w-sm">
           <Logo />
           <p className="mt-5 text-sm leading-relaxed">
-            {COPY.tagline}：用{CURRENCY_NAME}押注{COPY.footerTopics}，价格就是大家的集体预期。
+            {COPY.tagline}：用{CURRENCY_NAME}押注{COPY.footerTopics}，奖池怎么分布，就是大家的集体预期。
           </p>
         </div>
         <div className="grid grid-cols-3 gap-10 sm:gap-16">

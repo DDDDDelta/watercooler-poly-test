@@ -1,28 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MarketDetail, MarketPosition } from '@watercooler/shared';
+import { CURRENCY_NAME, payoutFor, type MarketDetail, type Stake } from '@watercooler/shared';
 import clsx from 'clsx';
 import { Ban, CalendarClock, ChevronLeft, Crown, Gavel, MessageCircle, ScrollText, Trash2, Users } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Avatar } from '../components/Avatar';
+import { BetPanel } from '../components/BetPanel';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { Money } from '../components/Money';
 import { StatusBadge } from '../components/StatusBadge';
-import { TradePanel } from '../components/TradePanel';
 import { Badge, Button, Card, Empty, Modal, PageLoader, Segmented, Spinner, Textarea } from '../components/ui';
 import { api, errorMessage, type HistoryRange } from '../lib/api';
 import { useMe } from '../lib/auth';
 import { outcomeColor } from '../lib/colors';
-import {
-  formatDate,
-  formatMoney,
-  formatPct,
-  formatPct1,
-  formatRelative,
-  formatShares,
-  formatSigned,
-} from '../lib/format';
+import { formatDate, formatMoney, formatMultiplier, formatPct, formatRelative, formatSigned } from '../lib/format';
 
 const PriceChart = lazy(() => import('../components/PriceChart'));
 
@@ -42,7 +34,7 @@ function ChartCard({ market }: { market: MarketDetail }) {
         {market.isBinary ? (
           <div className="flex items-end gap-3">
             <span className="font-mono text-5xl font-bold text-brand">{formatPct(lead.probability)}</span>
-            <span className="pb-2 text-sm text-dim">{lead.label === '是' ? '概率' : lead.label}</span>
+            <span className="pb-2 text-sm text-dim">押「{lead.label}」占比</span>
             {lead.change24h !== null && Math.abs(lead.change24h) >= 0.001 && (
               <span className={clsx('pb-2 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
                 {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 1)}% 24h
@@ -73,7 +65,11 @@ function ChartCard({ market }: { market: MarketDetail }) {
         />
       </div>
       <div className="mt-4 h-72">
-        {isPending || !data ? (
+        {market.pot === 0 ? (
+          <Empty icon={<Users className="size-10" />} title="还没有人下注">
+            第一笔下注之后，这里会显示大家押注比例的变化
+          </Empty>
+        ) : isPending || !data ? (
           <div className="flex h-full items-center justify-center">
             <Spinner />
           </div>
@@ -101,7 +97,7 @@ function OutcomeTable({
     <Card className="overflow-hidden">
       <div className="grid grid-cols-[1fr_auto_auto] gap-4 border-b border-line px-5 py-2.5 text-xs text-faint">
         <span>选项</span>
-        <span className="w-20 text-right">概率</span>
+        <span className="w-20 text-right">奖池占比</span>
         <span className="w-20" />
       </div>
       {sorted.map((o) => {
@@ -121,8 +117,16 @@ function OutcomeTable({
             />
             <div className="relative flex min-w-0 items-center gap-3">
               <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: c }} />
-              <span className="truncate font-medium">{o.label}</span>
-              {isWinner && <Crown className="size-4 shrink-0 text-gold" />}
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate font-medium">{o.label}</span>
+                  {isWinner && <Crown className="size-4 shrink-0 text-gold" />}
+                </span>
+                <span className="block text-xs text-faint">
+                  奖池 {formatMoney(o.pool)}
+                  {o.pool > 0 && market.status === 'open' && ` · 赔率 ${formatMultiplier(market.pot / o.pool)}`}
+                </span>
+              </span>
               {o.change24h !== null && Math.abs(o.change24h) >= 0.005 && (
                 <span className={clsx('shrink-0 font-mono text-xs', o.change24h > 0 ? 'text-yes' : 'text-no')}>
                   {o.change24h > 0 ? '▲' : '▼'}
@@ -138,7 +142,7 @@ function OutcomeTable({
                   className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition hover:brightness-125"
                   style={{ borderColor: `${c}55`, background: `${c}1a`, color: c }}
                 >
-                  买入
+                  押注
                 </button>
               )}
             </div>
@@ -169,17 +173,17 @@ function ResolutionBanner({ market }: { market: MarketDetail }) {
       <div className="text-sm">
         <div className="font-semibold">
           {market.status === 'resolved'
-            ? `已结算：「${winner?.label}」`
+            ? `已公布结果：「${winner?.label}」`
             : market.status === 'cancelled'
-              ? '市场已取消，投入已退回'
-              : '交易已截止，等待结算'}
+              ? '市场已取消，所有下注已全额退回'
+              : `下注已截止，等待 ${market.creator.displayName} 公布结果`}
         </div>
         {market.resolutionNote && <div className="mt-1 text-fg/70">{market.resolutionNote}</div>}
-        {market.resolvedBy && market.resolvedAt && (
-          <div className="mt-1 text-xs opacity-70">
-            {market.resolvedBy.displayName} · {formatDate(market.resolvedAt)}
-          </div>
-        )}
+        <div className="mt-1 text-xs opacity-70">
+          {market.status === 'closed'
+            ? `${formatDate(market.resolveBy)} 前没有公布的话，市场自动取消并全额退款`
+            : market.resolvedAt && formatDate(market.resolvedAt)}
+        </div>
       </div>
     </div>
   );
@@ -249,7 +253,7 @@ function Comments({ marketId }: { marketId: number }) {
                   {c.user.displayName}
                 </Link>
                 <span className="text-xs text-faint">{formatRelative(c.createdAt)}</span>
-                {me && (me.id === c.user.id || me.role === 'admin') && (
+                {me?.id === c.user.id && (
                   <button
                     onClick={() => remove.mutate(c.id)}
                     className="ml-auto text-faint opacity-0 transition group-hover:opacity-100 hover:text-no"
@@ -272,7 +276,7 @@ function Comments({ marketId }: { marketId: number }) {
 function Holders({ market }: { market: MarketDetail }) {
   const { data } = useQuery({ queryKey: ['holders', market.id], queryFn: () => api.holders(market.id) });
   if (!data) return <Spinner />;
-  if (data.length === 0) return <Empty title="还没有人持仓" />;
+  if (data.length === 0) return <Empty title="还没有人下注" />;
   const groups = market.outcomes
     .map((o) => ({ outcome: o, holders: data.filter((h) => h.outcomeId === o.id) }))
     .filter((g) => g.holders.length);
@@ -284,7 +288,7 @@ function Holders({ market }: { market: MarketDetail }) {
             className="mb-2 flex items-center gap-2 text-sm font-semibold"
             style={{ color: outcomeColor(outcome.index, market.isBinary) }}
           >
-            {outcome.label} 持有者
+            押「{outcome.label}」的人
           </div>
           <ul className="space-y-1">
             {holders.map((h) => (
@@ -295,7 +299,7 @@ function Holders({ market }: { market: MarketDetail }) {
                 >
                   <Avatar id={h.user.id} name={h.user.displayName} size={24} />
                   <span className="flex-1 truncate">{h.user.displayName}</span>
-                  <span className="font-mono text-xs text-dim">{formatShares(h.shares)} 份</span>
+                  <Money value={h.amount} className="font-mono text-xs text-dim" />
                 </Link>
               </li>
             ))}
@@ -306,68 +310,72 @@ function Holders({ market }: { market: MarketDetail }) {
   );
 }
 
-function TradeHistory({ market }: { market: MarketDetail }) {
-  const { data } = useQuery({ queryKey: ['marketTrades', market.id], queryFn: () => api.marketTrades(market.id) });
+function BetHistory({ market }: { market: MarketDetail }) {
+  const { data } = useQuery({ queryKey: ['marketBets', market.id], queryFn: () => api.marketBets(market.id) });
   if (!data) return <Spinner />;
-  if (data.length === 0) return <Empty title="还没有成交" />;
+  if (data.length === 0) return <Empty title="还没有人下注" />;
   return (
     <ul className="divide-y divide-line">
-      {data.map((t) => (
-        <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
-          <Avatar id={t.user.id} name={t.user.displayName} size={26} />
+      {data.map((b) => (
+        <li key={b.id} className="flex items-center gap-3 py-2.5 text-sm">
+          <Avatar id={b.user.id} name={b.user.displayName} size={26} />
           <div className="min-w-0 flex-1 truncate">
-            <Link to={`/u/${t.user.id}`} className="font-medium hover:underline">
-              {t.user.displayName}
+            <Link to={`/u/${b.user.id}`} className="font-medium hover:underline">
+              {b.user.displayName}
             </Link>{' '}
-            <span className={t.side === 'buy' ? 'text-yes' : 'text-no'}>{t.side === 'buy' ? '买入' : '卖出'}</span>{' '}
-            <span className="font-mono text-dim">{formatShares(t.shares)}</span> 份{' '}
+            押{' '}
             <span
               style={{
-                color: outcomeColor(market.outcomes.find((o) => o.id === t.outcomeId)?.index ?? 0, market.isBinary),
+                color: outcomeColor(market.outcomes.find((o) => o.id === b.outcomeId)?.index ?? 0, market.isBinary),
               }}
             >
-              {t.outcomeLabel}
+              {b.outcomeLabel}
             </span>
           </div>
-          <Money value={t.amount} className="font-mono" />
-          <span className="w-16 text-right text-xs text-faint">{formatRelative(t.createdAt)}</span>
+          <Money value={b.amount} className="font-mono" />
+          <span className="w-16 text-right text-xs text-faint">{formatRelative(b.createdAt)}</span>
         </li>
       ))}
     </ul>
   );
 }
 
-function MyPosition({ market, positions }: { market: MarketDetail; positions: MarketPosition[] }) {
-  if (positions.length === 0) return null;
+function MyStakes({ market, stakes }: { market: MarketDetail; stakes: Stake[] }) {
+  if (stakes.length === 0) return null;
+  const pools = market.outcomes.map((o) => o.pool);
+  const winner = market.outcomes.find((o) => o.id === market.resolvedOutcomeId);
+  const refunded = market.status === 'cancelled' || (winner !== undefined && winner.pool === 0);
   return (
     <Card className="p-5">
-      <h3 className="mb-3 text-sm font-semibold text-dim">我的持仓</h3>
+      <h3 className="mb-3 text-sm font-semibold text-dim">我的下注</h3>
       <div className="space-y-3">
-        {positions.map((p) => {
-          const o = market.outcomes.find((x) => x.id === p.outcomeId)!;
-          const value = p.shares * o.probability;
-          const pnl = value - p.cost;
+        {stakes.map((s) => {
+          const i = market.outcomes.findIndex((x) => x.id === s.outcomeId);
+          const o = market.outcomes[i]!;
+          const payout = payoutFor(pools, i, s.amount);
+          const [label, value, className] = refunded
+            ? ['已退回', s.amount, 'text-dim']
+            : winner
+              ? winner.id === o.id
+                ? ['已获得', payout, 'text-yes']
+                : ['未押中', 0, 'text-no']
+              : ['猜中可得', payout, 'text-yes'];
           return (
-            <div key={p.outcomeId} className="rounded bg-raised p-3">
+            <div key={s.outcomeId} className="rounded bg-raised p-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold" style={{ color: outcomeColor(o.index, market.isBinary) }}>
                   {o.label}
                 </span>
-                <span className="font-mono text-sm">{formatShares(p.shares)} 份</span>
+                <span className="text-sm">
+                  已押 <Money value={s.amount} className="font-mono" />
+                </span>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <div className="text-faint">均价</div>
-                  <div className="font-mono">{formatPct1(p.cost / p.shares)}</div>
-                </div>
-                <div>
-                  <div className="text-faint">市值</div>
-                  <div className="font-mono">{formatMoney(value)}</div>
-                </div>
-                <div>
-                  <div className="text-faint">盈亏</div>
-                  <div className={clsx('font-mono', pnl >= 0 ? 'text-yes' : 'text-no')}>{formatSigned(pnl)}</div>
-                </div>
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="text-faint">{label}</span>
+                <span className={clsx('font-mono', className)}>
+                  {formatMoney(value)}
+                  {!winner && !refunded && ` (${formatSigned(value - s.amount)})`}
+                </span>
               </div>
             </div>
           );
@@ -377,7 +385,7 @@ function MyPosition({ market, positions }: { market: MarketDetail; positions: Ma
   );
 }
 
-function AdminPanel({ market }: { market: MarketDetail }) {
+function CreatorPanel({ market }: { market: MarketDetail }) {
   const qc = useQueryClient();
   const [mode, setMode] = useState<'resolve' | 'cancel' | null>(null);
   const [outcomeId, setOutcomeId] = useState<number | null>(null);
@@ -388,7 +396,7 @@ function AdminPanel({ market }: { market: MarketDetail }) {
         ? api.resolve(market.id, outcomeId!, note.trim() || undefined)
         : api.cancel(market.id, note.trim() || undefined),
     onSuccess: () => {
-      toast.success(mode === 'resolve' ? '已结算，奖金已发放' : '已取消，投入已退回');
+      toast.success(mode === 'resolve' ? '结果已公布，奖池已发放' : '市场已取消，下注已全额退回');
       setMode(null);
       void qc.invalidateQueries();
     },
@@ -397,22 +405,27 @@ function AdminPanel({ market }: { market: MarketDetail }) {
   if (market.status === 'resolved' || market.status === 'cancelled') return null;
 
   return (
-    <Card className="border-gold/20 p-5">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-gold">
-        <Gavel className="size-4" /> 管理员操作
+    <Card className="border-brand/30 p-5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-brand">
+        <Gavel className="size-4" /> 你是创建者
       </h3>
       <p className="mt-1.5 text-xs leading-relaxed text-faint">
-        结算后每份获胜份额兑付 1 水滴；取消则按每人净投入退款。操作不可撤销。
+        结果由你来公布，所以你不能在自己的市场下注。
+        {market.status === 'closed'
+          ? `下注已截止，请在 ${formatDate(market.resolveBy)} 前公布结果，否则市场自动取消并全额退款。`
+          : `结果确定后就可以公布，公布后立即停止下注；截止后最晚 ${formatDate(market.resolveBy)} 前公布。`}
+        押中的人按比例瓜分全部 {formatMoney(market.pot)} {CURRENCY_NAME}{' '}
+        奖池；题目出了问题可以取消，所有下注全额退回。操作不可撤销。
       </p>
       <div className="mt-4 flex gap-2">
         <Button size="sm" className="flex-1" onClick={() => setMode('resolve')}>
-          结算
+          公布结果
         </Button>
         <Button size="sm" variant="danger" className="flex-1" onClick={() => setMode('cancel')}>
           取消市场
         </Button>
       </div>
-      <Modal open={mode !== null} onClose={() => setMode(null)} title={mode === 'resolve' ? '结算市场' : '取消市场'}>
+      <Modal open={mode !== null} onClose={() => setMode(null)} title={mode === 'resolve' ? '公布结果' : '取消市场'}>
         {mode === 'resolve' && (
           <div className="space-y-2">
             <div className="text-sm text-dim">选择最终结果</div>
@@ -426,14 +439,14 @@ function AdminPanel({ market }: { market: MarketDetail }) {
                 )}
               >
                 {o.label}
-                <span className="font-mono text-xs text-faint">{formatPct(o.probability)}</span>
+                <span className="font-mono text-xs text-faint">奖池 {formatMoney(o.pool)}</span>
               </button>
             ))}
           </div>
         )}
         <Textarea
           className="mt-4"
-          placeholder={mode === 'resolve' ? '结算说明（可选），比如依据来源' : '取消原因（可选）'}
+          placeholder={mode === 'resolve' ? '结果说明（可选），比如依据来源' : '取消原因（可选）'}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -444,7 +457,7 @@ function AdminPanel({ market }: { market: MarketDetail }) {
           loading={mutation.isPending}
           onClick={() => mutation.mutate()}
         >
-          确认{mode === 'resolve' ? '结算' : '取消'}
+          确认{mode === 'resolve' ? '公布' : '取消'}
         </Button>
       </Modal>
     </Card>
@@ -455,7 +468,7 @@ export default function Market() {
   const id = Number(useParams().id);
   const [params, setParams] = useSearchParams();
   const { me } = useMe();
-  const [tab, setTab] = useState<'comments' | 'holders' | 'trades'>('comments');
+  const [tab, setTab] = useState<'comments' | 'holders' | 'bets'>('comments');
   const { data, isPending, error } = useQuery({
     queryKey: ['market', id],
     queryFn: () => api.market(id),
@@ -470,7 +483,7 @@ export default function Market() {
 
   if (isPending) return <PageLoader />;
   if (error || !data) return <Empty title="市场不存在或已被删除" />;
-  const { market, positions } = data;
+  const { market, stakes } = data;
   const selected = outcomeId && market.outcomes.some((o) => o.id === outcomeId) ? outcomeId : market.outcomes[0]!.id;
 
   const selectOutcome = (oid: number) => {
@@ -498,10 +511,10 @@ export default function Market() {
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-dim">
               <span className="inline-flex items-center gap-1.5">
-                <Money value={market.volume} /> 成交
+                奖池 <Money value={market.pot} />
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Users className="size-4 text-faint" /> {market.traderCount} 人参与
+                <Users className="size-4 text-faint" /> {market.bettorCount} 人下注
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <CalendarClock className="size-4 text-faint" /> {formatDate(market.closeAt)} 截止
@@ -519,9 +532,9 @@ export default function Market() {
       </div>
 
       <aside id="trade" className="space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:self-start">
-        <TradePanel market={market} positions={positions} outcomeId={selected} onOutcomeChange={selectOutcome} />
-        <MyPosition market={market} positions={positions} />
-        {me?.role === 'admin' && <AdminPanel market={market} />}
+        <BetPanel market={market} stakes={stakes} outcomeId={selected} onOutcomeChange={selectOutcome} />
+        <MyStakes market={market} stakes={stakes} />
+        {me?.id === market.creator.id && <CreatorPanel market={market} />}
       </aside>
 
       <div className="space-y-5">
@@ -530,7 +543,7 @@ export default function Market() {
             <ScrollText className="size-4 text-brand" /> 结算规则
           </h2>
           <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg">
-            {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由管理员结算。'}
+            {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由发起人公布结果。'}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-faint sm:grid-cols-4">
             <div>
@@ -538,12 +551,12 @@ export default function Market() {
               <div className="mt-0.5 text-dim">{formatDate(market.createdAt)}</div>
             </div>
             <div>
-              <div>截止时间</div>
+              <div>下注截止</div>
               <div className="mt-0.5 text-dim">{formatDate(market.closeAt)}</div>
             </div>
             <div>
-              <div>流动性参数</div>
-              <div className="mt-0.5 font-mono text-dim">b = {market.liquidity}</div>
+              <div>最晚公布结果</div>
+              <div className="mt-0.5 text-dim">{formatDate(market.resolveBy)}</div>
             </div>
             <div>
               <div>选项数</div>
@@ -566,14 +579,14 @@ export default function Market() {
                   </span>
                 ),
               },
-              { value: 'holders', label: '持仓榜' },
-              { value: 'trades', label: '成交记录' },
+              { value: 'holders', label: '下注榜' },
+              { value: 'bets', label: '下注记录' },
             ]}
           />
           <div className="mt-5">
             {tab === 'comments' && <Comments marketId={market.id} />}
             {tab === 'holders' && <Holders market={market} />}
-            {tab === 'trades' && <TradeHistory market={market} />}
+            {tab === 'bets' && <BetHistory market={market} />}
           </div>
         </Card>
       </div>

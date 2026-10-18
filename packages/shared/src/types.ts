@@ -1,8 +1,6 @@
 // API data-transfer objects shared by server and web.
 // Money amounts are expressed in currency units (2 decimal places); timestamps are unix ms.
 
-export type Role = 'user' | 'admin';
-
 export interface UserRef {
   id: number;
   username: string;
@@ -10,7 +8,6 @@ export interface UserRef {
 }
 
 export interface PublicUser extends UserRef {
-  role: Role;
   createdAt: number;
 }
 
@@ -23,19 +20,19 @@ export interface AppConfig {
   inviteRequired: boolean;
   startingBalance: number;
   dailyBonus: number;
-  allowUserMarkets: boolean;
   privateMode: boolean;
 }
 
-/** `closed` is derived: trading time is over but nobody has resolved the market yet. */
+/** `closed` is derived: betting time is over but the creator has not announced the result yet. */
 export type MarketStatus = 'open' | 'closed' | 'resolved' | 'cancelled';
 
 export interface Outcome {
   id: number;
   index: number;
   label: string;
-  /** LMSR outstanding shares (q_i). */
-  shares: number;
+  /** Total staked on this outcome. */
+  pool: number;
+  /** Share of the pot on this outcome, read as the crowd's probability. */
   probability: number;
   /** Probability change over the last 24h, or null when unknown. */
   change24h: number | null;
@@ -47,12 +44,12 @@ export interface MarketSummary {
   category: string;
   status: MarketStatus;
   isBinary: boolean;
-  liquidity: number;
-  volume: number;
+  /** Everything staked so far (the pot winners split). */
+  pot: number;
   closeAt: number;
   createdAt: number;
   resolvedOutcomeId: number | null;
-  traderCount: number;
+  bettorCount: number;
   commentCount: number;
   creator: UserRef;
   outcomes: Outcome[];
@@ -64,20 +61,20 @@ export interface MarketDetail extends MarketSummary {
   description: string;
   resolvedAt: number | null;
   resolutionNote: string | null;
-  resolvedBy: UserRef | null;
+  /** If still unresolved at this time, the market is cancelled and everyone refunded. */
+  resolveBy: number;
 }
 
-export interface MarketPosition {
+/** A user's total stake on one outcome. */
+export interface Stake {
   outcomeId: number;
-  shares: number;
-  /** Cost basis of the shares still held. */
-  cost: number;
+  amount: number;
 }
 
 export interface MarketDetailResponse {
   market: MarketDetail;
-  /** The current user's holdings in this market (empty when logged out). */
-  positions: MarketPosition[];
+  /** The current user's stakes in this market (empty when logged out). */
+  stakes: Stake[];
 }
 
 export interface PricePoint {
@@ -85,26 +82,21 @@ export interface PricePoint {
   probs: number[];
 }
 
-export type TradeSide = 'buy' | 'sell';
-
-export interface Trade {
+export interface Bet {
   id: number;
   user: UserRef;
   marketId: number;
   marketQuestion: string;
   outcomeId: number;
   outcomeLabel: string;
-  side: TradeSide;
-  shares: number;
   amount: number;
-  priceAfter: number;
   createdAt: number;
 }
 
 export interface Holder {
   user: UserRef;
   outcomeId: number;
-  shares: number;
+  amount: number;
 }
 
 export interface Comment {
@@ -114,30 +106,28 @@ export interface Comment {
   createdAt: number;
 }
 
-export interface TradeResult {
-  trade: Trade;
+export interface BetResult {
+  bet: Bet;
   balance: number;
   market: MarketDetail;
-  positions: MarketPosition[];
+  stakes: Stake[];
 }
 
-export type PortfolioPositionState = 'active' | 'won' | 'lost' | 'refunded';
+export type PortfolioState = 'active' | 'won' | 'lost' | 'refunded';
 
-export interface PortfolioPosition {
+export interface PortfolioBet {
   market: Pick<MarketSummary, 'id' | 'question' | 'status' | 'closeAt' | 'isBinary' | 'resolvedOutcomeId'>;
   outcomeId: number;
   outcomeLabel: string;
-  shares: number;
-  cost: number;
-  avgPrice: number;
-  price: number;
-  /** Mark-to-market value (or final payout once resolved). */
-  value: number;
-  pnl: number;
-  state: PortfolioPositionState;
+  stake: number;
+  /** Payout if it wins with the pools as they are now (active), or what was actually paid out. */
+  payout: number;
+  /** Settled result (payout - stake); null while the market is still undecided. */
+  pnl: number | null;
+  state: PortfolioState;
 }
 
-export type LedgerKind = 'signup' | 'bonus' | 'grant' | 'buy' | 'sell' | 'payout' | 'refund';
+export type LedgerKind = 'signup' | 'bonus' | 'bet' | 'payout' | 'refund';
 
 export interface LedgerEntry {
   id: number;
@@ -152,26 +142,29 @@ export interface LedgerEntry {
 
 export interface UserStats {
   balance: number;
-  positionsValue: number;
+  /** Stakes in markets that have not been settled yet. */
+  staked: number;
+  /** balance + staked */
   netWorth: number;
-  /** Total currency granted (signup bonus, daily bonus, admin grants). */
+  /** Total currency received for free (signup and daily bonus). */
   funded: number;
+  /** netWorth - funded: only settled bets move it. */
   profit: number;
-  tradeCount: number;
-  marketsTraded: number;
+  betCount: number;
+  marketsBet: number;
 }
 
 export interface Portfolio {
   stats: UserStats;
-  positions: PortfolioPosition[];
+  bets: PortfolioBet[];
 }
 
 export interface UserProfile {
   user: PublicUser;
   stats: UserStats;
   rank: number;
-  positions: PortfolioPosition[];
-  trades: Trade[];
+  bets: PortfolioBet[];
+  recentBets: Bet[];
   createdMarkets: MarketSummary[];
 }
 
@@ -183,18 +176,7 @@ export interface LeaderboardEntry {
 
 export interface SiteStats {
   openMarkets: number;
-  totalVolume: number;
-  traders: number;
+  totalStaked: number;
+  bettors: number;
   users: number;
-}
-
-export interface AdminUser extends PublicUser {
-  balance: number;
-  netWorth: number;
-  tradeCount: number;
-}
-
-export interface Paginated<T> {
-  items: T[];
-  nextCursor: number | null;
 }

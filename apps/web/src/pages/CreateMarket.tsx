@@ -2,24 +2,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CATEGORIES,
   createMarketSchema,
-  CURRENCY_NAME,
-  DEFAULT_LIQUIDITY,
-  LIQUIDITY_PRESETS,
-  lmsrInitialShares,
-  lmsrMaxLoss,
   MAX_OUTCOMES,
+  RESOLVE_GRACE_DAYS,
   type MarketSummary,
 } from '@watercooler/shared';
 import clsx from 'clsx';
-import { Plus, Sparkles, X } from 'lucide-react';
+import { Gavel, Plus, Sparkles, X } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { MarketCard } from '../components/MarketCard';
 import { Button, Card, Field, Input, Textarea } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
-import { useConfig, useMe } from '../lib/auth';
-import { formatMoney } from '../lib/format';
+import { useMe } from '../lib/auth';
 import { COPY } from '../lib/site';
 
 /** datetime-local value (local time) for a timestamp. */
@@ -40,15 +35,12 @@ export default function CreateMarket() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { me } = useMe();
-  const config = useConfig();
   const [question, setQuestion] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>(CATEGORIES[0]);
   const [kind, setKind] = useState<'binary' | 'multi'>('binary');
   const [options, setOptions] = useState<string[]>(['', '', '']);
   const [closeAt, setCloseAt] = useState(() => toLocalInput(Date.now() + 7 * 86_400_000));
-  const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
-  const [initial, setInitial] = useState(50);
 
   const outcomes = kind === 'binary' ? ['是', '否'] : options.map((o) => o.trim()).filter(Boolean);
   const closeTs = new Date(closeAt).getTime();
@@ -59,37 +51,31 @@ export default function CreateMarket() {
     category,
     closeAt: closeTs,
     outcomes,
-    liquidity,
-    initialProbability: kind === 'binary' && initial !== 50 ? initial / 100 : undefined,
   };
   const validation = createMarketSchema.safeParse(payload);
   const firstError = validation.success ? null : validation.error.issues[0]?.message;
 
   const preview: MarketSummary = (() => {
-    const n = Math.max(outcomes.length, 2);
     const labels = outcomes.length >= 2 ? outcomes : ['选项 A', '选项 B'];
-    const probs = kind === 'binary' ? [initial / 100, 1 - initial / 100] : Array.from({ length: n }, () => 1 / n);
-    const shares = lmsrInitialShares(probs, liquidity);
     return {
       id: 0,
       question: question.trim() || '你的问题会显示在这里？',
       category,
       status: 'open',
       isBinary: labels.length === 2,
-      liquidity,
-      volume: 0,
+      pot: 0,
       closeAt: Number.isFinite(closeTs) ? closeTs : Date.now(),
       createdAt: Date.now(),
       resolvedOutcomeId: null,
-      traderCount: 0,
+      bettorCount: 0,
       commentCount: 0,
       creator: { id: me?.id ?? 0, username: me?.username ?? '', displayName: me?.displayName ?? '' },
       outcomes: labels.map((label, i) => ({
         id: -i - 1,
         index: i,
         label,
-        shares: shares[i] ?? 0,
-        probability: probs[i] ?? 0,
+        pool: 0,
+        probability: 1 / labels.length,
         change24h: null,
       })),
       spark: [],
@@ -106,10 +92,6 @@ export default function CreateMarket() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
-
-  if (config && !config.allowUserMarkets && me?.role !== 'admin') {
-    return <div className="py-20 text-center text-dim">目前只有管理员可以创建市场</div>;
-  }
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -176,19 +158,7 @@ export default function CreateMarket() {
             </div>
           </div>
 
-          {kind === 'binary' ? (
-            <Field label={`初始概率：${initial}%`} hint="你对「是」的初始判断，之后由交易决定">
-              <input
-                type="range"
-                min={5}
-                max={95}
-                step={5}
-                value={initial}
-                onChange={(e) => setInitial(Number(e.target.value))}
-                className="w-full accent-[var(--color-brand)]"
-              />
-            </Field>
-          ) : (
+          {kind === 'multi' && (
             <div>
               <span className="text-sm font-medium text-dim">选项（只会有一个成真）</span>
               <div className="mt-2 space-y-2">
@@ -221,7 +191,7 @@ export default function CreateMarket() {
             </div>
           )}
 
-          <Field label="交易截止时间" hint="截止后停止交易，等待管理员根据结果结算">
+          <Field label="下注截止时间" hint={`截止后停止下注，你需要在之后 ${RESOLVE_GRACE_DAYS} 天内公布结果`}>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 type="datetime-local"
@@ -248,32 +218,6 @@ export default function CreateMarket() {
             </div>
           </Field>
 
-          <div>
-            <span className="text-sm font-medium text-dim">流动性</span>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {LIQUIDITY_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setLiquidity(p.value)}
-                  className={clsx(
-                    'rounded-lg border p-3 text-left transition',
-                    liquidity === p.value ? 'border-brand bg-brand-light' : 'border-line hover:border-brand',
-                  )}
-                >
-                  <div className="font-semibold">
-                    {p.label} <span className="font-mono text-xs text-faint">b={p.value}</span>
-                  </div>
-                  <div className="mt-0.5 text-xs leading-snug text-faint">{p.hint}</div>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-faint">
-              做市商最多补贴 {formatMoney(lmsrMaxLoss(liquidity, Math.max(outcomes.length, 2)))} {CURRENCY_NAME}
-              （系统承担，不扣你的余额）
-            </p>
-          </div>
-
           <Field label="结算规则" hint="写清楚以什么为准、边界情况怎么算，避免扯皮">
             <Textarea
               value={description}
@@ -297,6 +241,13 @@ export default function CreateMarket() {
           >
             发布市场
           </Button>
+          <div className="flex gap-2.5 rounded bg-raised p-3.5 text-xs leading-relaxed text-dim">
+            <Gavel className="mt-0.5 size-4 shrink-0 text-brand" />
+            <span>
+              结果由你来公布，所以你不能在自己的市场下注。截止后 {RESOLVE_GRACE_DAYS}{' '}
+              天内没有公布，市场会自动取消并全额退款。
+            </span>
+          </div>
           {firstError && (question || options.some(Boolean)) && (
             <p className="text-center text-sm text-no">{firstError}</p>
           )}

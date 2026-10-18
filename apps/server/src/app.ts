@@ -5,6 +5,7 @@ import { loadSessionUser } from './lib/session';
 import { authRoutes } from './routes/auth';
 import { marketRoutes } from './routes/markets';
 import { userRoutes } from './routes/users';
+import { cancelOverdueMarkets } from './services/bets';
 
 /** Endpoints reachable without a session even in private mode. */
 const PUBLIC_IN_PRIVATE_MODE = new Set([
@@ -31,6 +32,8 @@ export function createApp(deps: AppDeps) {
   });
 
   api.use('*', async (c, next) => {
+    // Settle overdue markets lazily, so every response already reflects the refunds.
+    cancelOverdueMarkets(deps.db, deps.now());
     c.set('user', loadSessionUser(c, deps.db, deps.config.basePath || '/', deps.now()));
     if (deps.config.privateMode && !c.get('user') && !PUBLIC_IN_PRIVATE_MODE.has(c.req.path)) {
       return c.json({ error: '请先登录' }, 401);

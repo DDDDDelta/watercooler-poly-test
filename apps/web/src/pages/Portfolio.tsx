@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Money } from '../components/Money';
-import { PositionsTable } from '../components/PositionsTable';
+import { BetsTable } from '../components/BetsTable';
 import { Button, Card, PageLoader, Segmented, Stat } from '../components/ui';
 import { api } from '../lib/api';
 import { formatDate, formatSigned } from '../lib/format';
@@ -12,11 +12,9 @@ import { formatDate, formatSigned } from '../lib/format';
 const LEDGER_LABEL: Record<LedgerKind, string> = {
   signup: '注册奖励',
   bonus: '每日签到',
-  grant: '管理员发放',
-  buy: '买入',
-  sell: '卖出',
-  payout: '结算兑付',
-  refund: '取消退款',
+  bet: '下注',
+  payout: '押中奖金',
+  refund: '退款',
 };
 
 function Ledger() {
@@ -68,13 +66,13 @@ export default function PortfolioPage() {
   const [tab, setTab] = useState<'active' | 'closed' | 'ledger'>('active');
   const { data } = useQuery({ queryKey: ['portfolio'], queryFn: api.portfolio, refetchInterval: 15_000 });
   if (!data) return <PageLoader />;
-  const { stats, positions } = data;
-  const active = positions.filter((p) => p.state === 'active');
-  const closed = positions.filter((p) => p.state !== 'active');
+  const { stats, bets } = data;
+  const active = bets.filter((b) => b.state === 'active');
+  const closed = bets.filter((b) => b.state !== 'active');
 
   return (
     <div>
-      <h1 className="section-title">我的持仓</h1>
+      <h1 className="section-title">我的下注</h1>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="总资产">
           <Money value={stats.netWorth} />
@@ -82,8 +80,8 @@ export default function PortfolioPage() {
         <Stat label="可用余额">
           <Money value={stats.balance} />
         </Stat>
-        <Stat label="持仓市值">
-          <Money value={stats.positionsValue} />
+        <Stat label="下注中">
+          <Money value={stats.staked} />
         </Stat>
         <Stat label="累计盈亏">
           <span className={stats.profit >= 0 ? 'text-yes' : 'text-no'}>
@@ -97,14 +95,14 @@ export default function PortfolioPage() {
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'active', label: `当前持仓 ${active.length || ''}` },
+            { value: 'active', label: `等待结果 ${active.length || ''}` },
             { value: 'closed', label: '已结束' },
             { value: 'ledger', label: '资金流水' },
           ]}
         />
         <div className="mt-4">
-          {tab === 'active' && <PositionsTable positions={active} empty="还没有持仓，去市场里看看吧" />}
-          {tab === 'closed' && <PositionsTable positions={closed} empty="还没有已结束的持仓" />}
+          {tab === 'active' && <BetsTable bets={active} empty="还没有下注，去市场里看看吧" />}
+          {tab === 'closed' && <BetsTable bets={closed} empty="还没有已结束的下注" />}
           {tab === 'ledger' && <Ledger />}
         </div>
       </Card>

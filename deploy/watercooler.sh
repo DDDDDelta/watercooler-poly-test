@@ -2,6 +2,7 @@
 # Runs one Watercooler instance in the background without systemd.
 #
 #   ~/<instance>/<instance>.sh start|stop|restart|status|logs   e.g. ~/gang-bet/gang-bet.sh restart
+#   ~/<instance>/<instance>.sh reset-password <username> <new-password>
 #
 # Every deploy copies this script to <app-dir>/<instance>.sh and calls `restart`.
 # It runs <app-dir>/current; the database, pid file and logs live in <app-dir>/shared/.
@@ -123,8 +124,15 @@ case "${1:-}" in
     ;;
   status) status ;;
   logs) tail -n 100 -f "$LOG_FILE" ;;
+  reset-password)
+    # There are no in-app admins; a forgotten password is reset here.
+    shift
+    load_node
+    cd "$APP_DIR/current"
+    node apps/server/dist/cli.js reset-password "$@"
+    ;;
   *)
-    echo "usage: $0 start|stop|restart|status|logs" >&2
+    echo "usage: $0 start|stop|restart|status|logs|reset-password <username> <new-password>" >&2
     exit 2
     ;;
 esac

@@ -30,7 +30,7 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
           <ProbabilityRing
             value={market.outcomes[0].probability}
             size={56}
-            label={yesNoLabels ? '概率' : market.outcomes[0].label.slice(0, 4)}
+            label={yesNoLabels ? '押是' : market.outcomes[0].label.slice(0, 4)}
           />
         )}
       </div>
@@ -92,10 +92,12 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
       </div>
 
       <footer className="mt-4 flex items-center gap-3 border-t border-line pt-3 text-xs text-faint">
-        <Money value={market.volume} compact className="text-dim" />
+        <span className="inline-flex items-center gap-1">
+          奖池 <Money value={market.pot} compact className="text-dim" />
+        </span>
         <span className="inline-flex items-center gap-1">
           <Users className="size-3.5" />
-          {market.traderCount}
+          {market.bettorCount}
         </span>
         {market.commentCount > 0 && (
           <span className="inline-flex items-center gap-1">
