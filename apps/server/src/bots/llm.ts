@@ -1,0 +1,65 @@
+import Anthropic from '@anthropic-ai/sdk';
+import type { BotConfig } from './config';
+
+/** A client tool the model calls to hand back its answer as structured input. */
+export type SubmitTool = Anthropic.Beta.BetaTool;
+
+export interface AskRequest {
+  system: string;
+  prompt: string;
+  /** Web searches the model may run; a failed search still uses one up. */
+  maxSearches: number;
+  tool: SubmitTool;
+}
+
+/** Ask the model with web search and return what it passed to `tool`, or null if it never called it. */
+export type Ask = (req: AskRequest) => Promise<unknown>;
+
+/** Models with dynamic-filtering web search (`web_search_20260209`). */
+const DYNAMIC_SEARCH_MODELS = /^claude-(opus-(5-5|5|4-8|4-7|4-6)|sonnet-(5-5|5|4-6)|fable-5(-1)?|mythos-5(-1)?)(\b|$)/;
+/** Models that accept the server-side `fallbacks: "default"` refusal fallback. */
+const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
+const OFFICIAL_ENDPOINT = 'https://api.anthropic.com';
+/** A paused server-tool turn is resumed at most this many times. */
+const MAX_CONTINUATIONS = 4;
+
+/** The SDK appends /v1/messages itself; accept endpoints written with or without it. */
+export function normalizeEndpoint(endpoint: string): string {
+  return endpoint.replace(/\/+$/, '').replace(/\/v1(\/messages)?$/, '');
+}
+
+export function createAsk(config: BotConfig): Ask {
+  const baseURL = normalizeEndpoint(config.endpoint);
+  const client = new Anthropic({ apiKey: config.apiKey, baseURL, maxRetries: 2, timeout: 10 * 60_000 });
+  const searchType =
+    config.webSearchTool ?? (DYNAMIC_SEARCH_MODELS.test(config.model) ? 'web_search_20260209' : 'web_search_20250305');
+  const fallback = config.refusalFallback ?? (baseURL === OFFICIAL_ENDPOINT && FALLBACK_MODELS.has(config.model));
+
+  return async ({ system, prompt, maxSearches, tool }) => {
+    const search: Anthropic.Beta.BetaToolUnion =
+      searchType === 'web_search_20260209'
+        ? { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches }
+        : { type: 'web_search_20250305', name: 'web_search', max_uses: maxSearches };
+    const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: prompt }];
+    for (let turn = 0; turn <= MAX_CONTINUATIONS; turn++) {
+      const response = await client.beta.messages.create({
+        model: config.model,
+        max_tokens: 16000,
+        system,
+        messages,
+        tools: [search, tool],
+        ...(config.effort ? { output_config: { effort: config.effort } } : {}),
+        ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+      });
+      if (response.stop_reason === 'refusal') return null;
+      const call = response.content.find(
+        (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use' && b.name === tool.name,
+      );
+      if (call) return call.input;
+      // The server-side search loop paused: send the turn back unchanged and it resumes.
+      if (response.stop_reason !== 'pause_turn') return null;
+      messages.push({ role: 'assistant', content: response.content });
+    }
+    return null;
+  };
+}

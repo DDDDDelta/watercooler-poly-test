@@ -9,6 +9,8 @@ export interface UserRef {
 
 export interface PublicUser extends UserRef {
   createdAt: number;
+  /** AI bot account: only plays in the AI zone and is left off the leaderboard. */
+  isBot: boolean;
 }
 
 export interface Me extends PublicUser {
@@ -21,6 +23,8 @@ export interface AppConfig {
   startingBalance: number;
   dailyBonus: number;
   privateMode: boolean;
+  /** Whether the AI zone exists (bots are running or there are AI markets). */
+  aiZone: boolean;
 }
 
 /** `closed` is derived: betting time is over but the creator has not announced the result yet. */
@@ -44,6 +48,8 @@ export interface MarketSummary {
   category: string;
   status: MarketStatus;
   isBinary: boolean;
+  /** Created by an AI bot; lives in the AI zone. */
+  isAi: boolean;
   /** Everything staked so far (the pot winners split). */
   pot: number;
   closeAt: number;
@@ -162,7 +168,8 @@ export interface Portfolio {
 export interface UserProfile {
   user: PublicUser;
   stats: UserStats;
-  rank: number;
+  /** Leaderboard position; null for bots, which are not ranked. */
+  rank: number | null;
   bets: PortfolioBet[];
   recentBets: Bet[];
   createdMarkets: MarketSummary[];
@@ -174,6 +181,19 @@ export interface LeaderboardEntry {
   stats: UserStats;
 }
 
+/** The AI zone at a glance. */
+export interface AiZoneSummary {
+  bots: number;
+  openMarkets: number;
+  /** Total staked in AI markets so far. */
+  pot: number;
+  /** What people (not bots) have won or lost on settled AI markets. */
+  humanProfit: number;
+  /** The bots with the most money. */
+  richestBots: LeaderboardEntry[];
+}
+
+/** Stats for markets made by people (the AI zone has its own summary). */
 export interface SiteStats {
   openMarkets: number;
   totalStaked: number;

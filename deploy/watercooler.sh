@@ -33,6 +33,8 @@ export NODE_ENV=production
 export HOST=127.0.0.1
 export PORT BASE_PATH
 export DATABASE_PATH="$APP_DIR/shared/data/$INSTANCE.db"
+# AI bots run only when this file exists (see bot.example.json and deploy/README.md).
+export BOT_CONFIG="$APP_DIR/shared/bot.json"
 
 die() {
   echo "$INSTANCE: $*" >&2

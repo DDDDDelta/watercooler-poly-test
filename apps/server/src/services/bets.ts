@@ -57,9 +57,13 @@ export function getBet(db: DB, id: number): Bet {
   return toBet(db.prepare(`${BET_SELECT} WHERE b.id = ?`).get(id) as BetRow);
 }
 
-export function listBets(db: DB, opts: { marketId?: number; userId?: number; before?: number; limit?: number }): Bet[] {
+export function listBets(
+  db: DB,
+  opts: { marketId?: number; userId?: number; zone?: 'human' | 'ai'; before?: number; limit?: number },
+): Bet[] {
   const where: string[] = [];
   const params: unknown[] = [];
+  if (opts.zone) where.push(opts.zone === 'ai' ? 'm.is_ai = 1' : 'm.is_ai = 0');
   if (opts.marketId !== undefined) {
     where.push('b.market_id = ?');
     params.push(opts.marketId);
@@ -125,6 +129,8 @@ export function placeBet(db: DB, userId: number, marketId: number, input: BetInp
   return db.transaction(() => {
     const market = getMarketRow(db, marketId);
     if (!isBettable(market, now)) throw conflict('该市场已停止下注');
+    const bettor = db.prepare('SELECT is_bot FROM users WHERE id = ?').get(userId) as { is_bot: 0 | 1 } | undefined;
+    if (bettor?.is_bot && !market.is_ai) throw forbidden('机器人只能在 AI 专区下注');
     const outcomes = getOutcomeRows(db, marketId);
     const outcome = outcomes.find((o) => o.id === input.outcomeId);
     if (!outcome) throw notFound('选项不存在');

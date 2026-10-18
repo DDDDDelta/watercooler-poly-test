@@ -9,6 +9,8 @@ export interface AppDeps {
   config: Config;
   /** Injectable clock, for tests and seeding. */
   now: () => number;
+  /** Whether AI bots are running (a valid bot.json was found). */
+  botsEnabled?: boolean;
 }
 
 export interface AppEnv {

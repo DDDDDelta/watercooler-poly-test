@@ -26,6 +26,8 @@ export interface MarketRow {
   resolved_at: number | null;
   resolution_note: string | null;
   pot: number;
+  is_ai: 0 | 1;
+  ai_checked_at: number | null;
   created_at: number;
 }
 
@@ -123,6 +125,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       category: r.category,
       status: derivedStatus(r, now),
       isBinary: outcomes.length === 2,
+      isAi: r.is_ai === 1,
       pot: fromCents(r.pot),
       closeAt: r.close_at,
       createdAt: r.created_at,
@@ -194,9 +197,12 @@ function sparklines(
 
 export type MarketFilter = 'active' | 'closed' | 'resolved' | 'all';
 export type MarketSort = 'trending' | 'pot' | 'new' | 'closing';
+/** People's markets, the AI zone, or both. */
+export type MarketZone = 'human' | 'ai' | 'any';
 
 export interface ListMarketsOptions {
   filter?: MarketFilter;
+  zone?: MarketZone;
   sort?: MarketSort;
   category?: string;
   search?: string;
@@ -220,6 +226,8 @@ export function listMarkets(db: DB, now: number, opts: ListMarketsOptions = {}):
     case 'all':
       break;
   }
+  if (opts.zone === 'human') where.push('m.is_ai = 0');
+  if (opts.zone === 'ai') where.push('m.is_ai = 1');
   if (opts.category) {
     where.push('m.category = @category');
     params.category = opts.category;
@@ -273,22 +281,32 @@ export function recordPriceSnapshot(db: DB, marketId: number, probs: number[], n
   );
 }
 
-export function createMarket(db: DB, creatorId: number, input: CreateMarketInput, now: number): number {
+export function createMarket(
+  db: DB,
+  creatorId: number,
+  input: CreateMarketInput,
+  now: number,
+  opts: { ai?: boolean } = {},
+): number {
   if (input.closeAt <= now + 5 * MINUTE) throw badRequest('截止时间至少要在 5 分钟之后');
   if (input.closeAt > now + 5 * 365 * DAY) throw badRequest('截止时间不能超过 5 年');
   return db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare(
-        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO markets (question, description, category, creator_id, close_at, is_ai, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.question, input.description ?? '', input.category, creatorId, input.closeAt, now);
+      .run(input.question, input.description ?? '', input.category, creatorId, input.closeAt, opts.ai ? 1 : 0, now);
     const marketId = Number(lastInsertRowid);
     const insertOutcome = db.prepare('INSERT INTO outcomes (market_id, idx, label) VALUES (?, ?, ?)');
     input.outcomes.forEach((label, i) => insertOutcome.run(marketId, i, label));
     recordPriceSnapshot(db, marketId, poolShares(input.outcomes.map(() => 0)), now);
     return marketId;
   })();
+}
+
+export function aiMarketsExist(db: DB): boolean {
+  return db.prepare('SELECT 1 FROM markets WHERE is_ai = 1 LIMIT 1').get() !== undefined;
 }
 
 export type HistoryRange = '1d' | '1w' | '1m' | 'all';

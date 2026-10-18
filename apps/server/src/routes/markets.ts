@@ -22,6 +22,7 @@ import {
   type HistoryRange,
   type MarketFilter,
   type MarketSort,
+  type MarketZone,
 } from '../services/markets';
 import { getUserById } from '../services/users';
 
@@ -36,6 +37,7 @@ export function marketRoutes({ db, now }: AppDeps) {
     return c.json(
       listMarkets(db, now(), {
         filter: pick<MarketFilter>(q.filter, ['active', 'closed', 'resolved', 'all'], 'active'),
+        zone: pick<MarketZone>(q.zone, ['human', 'ai', 'any'], 'human'),
         sort: pick<MarketSort>(q.sort, ['trending', 'pot', 'new', 'closing'], 'trending'),
         category: q.category || undefined,
         search: q.q?.trim() || undefined,

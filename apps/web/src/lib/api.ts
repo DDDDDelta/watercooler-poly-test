@@ -1,4 +1,5 @@
 import type {
+  AiZoneSummary,
   AppConfig,
   Bet,
   BetInput,
@@ -67,9 +68,11 @@ export const api = {
   claimBonus: () => post<{ balance: number; amount: number }>('/me/bonus'),
 
   stats: () => get<SiteStats>('/stats'),
-  activity: (limit = 30) => get<Bet[]>(`/activity${qs({ limit })}`),
-  markets: (p: { filter?: MarketFilter; sort?: MarketSort; category?: string; q?: string; limit?: number } = {}) =>
-    get<MarketSummary[]>(`/markets${qs(p)}`),
+  activity: (limit = 30, zone?: 'ai') => get<Bet[]>(`/activity${qs({ limit, zone })}`),
+  markets: (
+    p: { filter?: MarketFilter; sort?: MarketSort; category?: string; q?: string; limit?: number; zone?: 'ai' } = {},
+  ) => get<MarketSummary[]>(`/markets${qs(p)}`),
+  aiZone: () => get<AiZoneSummary>('/ai'),
   market: (id: number) => get<MarketDetailResponse>(`/markets/${id}`),
   history: (id: number, range: HistoryRange) => get<PricePoint[]>(`/markets/${id}/history${qs({ range })}`),
   marketBets: (id: number) => get<Bet[]>(`/markets/${id}/bets`),

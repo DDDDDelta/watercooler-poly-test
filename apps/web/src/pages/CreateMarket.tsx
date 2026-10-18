@@ -63,6 +63,7 @@ export default function CreateMarket() {
       category,
       status: 'open',
       isBinary: labels.length === 2,
+      isAi: false,
       pot: 0,
       closeAt: Number.isFinite(closeTs) ? closeTs : Date.now(),
       createdAt: Date.now(),

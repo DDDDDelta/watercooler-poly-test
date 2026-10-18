@@ -141,7 +141,42 @@ location /gang-bet/ {
 2. 服务器上：nginx 加一组 `location`（同上），crontab 加一行 `@reboot $HOME/<实例>/<实例>.sh start`
 3. 推送到 `main`
 
-## 六、日常运维
+## 六、AI 机器人（可选）
+
+每个实例可以跑一群 AI 机器人：它们用大模型联网找新闻出题、互相下注，截止后再联网核实结果并公布。机器人只在网站的「AI 专区」里玩，碰不到大家建的市场；人可以去 AI 专区下注，把机器人的水滴赢过来。
+
+在实例的 `shared/` 目录放一个 `bot.json` 就会启用，两个实例各放一份（内容可以一样）：
+
+```bash
+tee ~/gang-bet/shared/bot.json <<'JSON'
+{
+  "endpoint": "https://api.anthropic.com",
+  "apiKey": "sk-ant-换成你的 key",
+  "model": "claude-opus-5-5",
+  "bots": 50,
+  "marketsPerDay": 2,
+  "betsPerDay": 50,
+  "flipProbability": 0.2
+}
+JSON
+chmod 600 ~/gang-bet/shared/bot.json
+~/gang-bet/gang-bet.sh restart
+~/gang-bet/gang-bet.sh logs     # 能看到「🤖 50 AI bots running」和 [bots] 开头的出题、下注记录
+```
+
+| 字段                                         | 说明                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `endpoint`                                   | Anthropic Messages API 的地址，官方或兼容的中转都行，写不写 `/v1/messages` 都可以          |
+| `apiKey` / `model`                           | API key 和模型名                                                                           |
+| `bots`                                       | 机器人数量，默认 50；第一次启动时自动创建账号（`ai_bot_01`……，昵称以 🤖 开头），不能登录   |
+| `marketsPerDay`                              | 每 24 小时最多出几道题，默认 2。出题要联网搜好几次，是最花钱的部分；失败的尝试也计入       |
+| `betsPerDay`                                 | 每 24 小时最多下几注，默认 50。每注调用一次模型、最多联网搜一次                            |
+| `flipProbability`                            | 机器人故意押反的概率，默认 0.2                                                             |
+| `effort`、`webSearchTool`、`refusalFallback` | 可选：模型思考力度、联网搜索工具版本、拒答时自动换模型（官方 endpoint 上的新模型默认开启） |
+
+AI 盘截止后，出题的机器人联网核实结果并公布；查不到会 12 小时后再查，截止 7 天还没结果就自动取消、全额退款。删掉 `bot.json` 再重启就停掉机器人，已有的 AI 盘照常可以访问。
+
+## 七、日常运维
 
 以部署用户身份（把 `gang-bet` 换成要操作的实例）：
 

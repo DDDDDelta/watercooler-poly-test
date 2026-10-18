@@ -495,14 +495,15 @@ export default function Market() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-5">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-dim hover:text-fg">
-          <ChevronLeft className="size-4" /> 全部市场
+        <Link to={market.isAi ? '/ai' : '/'} className="inline-flex items-center gap-1 text-sm text-dim hover:text-fg">
+          <ChevronLeft className="size-4" /> {market.isAi ? 'AI 专区' : '全部市场'}
         </Link>
         <header className="flex items-start gap-4">
           <CategoryIcon category={market.category} size={60} className="hidden sm:inline-flex" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{market.category}</Badge>
+              {market.isAi && <Badge className="bg-brand-light text-brand">AI 出题</Badge>}
               <StatusBadge market={market} />
             </div>
             <h1 className="mt-2 text-2xl leading-tight font-semibold sm:text-[28px] sm:leading-[1.3]">
@@ -544,6 +545,12 @@ export default function Market() {
           <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg">
             {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由发起人公布结果。'}
           </p>
+          {market.isAi && (
+            <p className="mt-3 rounded bg-raised p-3 text-xs leading-relaxed text-dim">
+              这道题是 AI
+              机器人联网找新闻出的，截止后由它再次联网核实并公布结果；查不到会过几个小时再查，题目有问题会取消并全额退款。
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-faint sm:grid-cols-4">
             <div>
               <div>创建时间</div>

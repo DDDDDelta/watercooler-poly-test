@@ -191,4 +191,20 @@ export const migrations: string[] = [
     SELECT id, 'signup', 100000, 100000, '玩法升级为奖池模式，余额重置', CAST(unixepoch('subsec') * 1000 AS INTEGER)
       FROM users;
   `,
+  /* 3: AI bots and the AI zone. Bots are ordinary accounts flagged is_bot; markets they create are
+        is_ai and only those can take bot bets. ai_checked_at throttles the creator bot's attempts to
+        look up the result; bot_attempts counts paid question-writing calls, failed ones included,
+        against the daily cap. */ `
+  ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE markets ADD COLUMN is_ai INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE markets ADD COLUMN ai_checked_at INTEGER;
+  CREATE INDEX markets_ai ON markets(is_ai, status, close_at);
+
+  CREATE TABLE bot_attempts (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX bot_attempts_kind ON bot_attempts(kind, created_at);
+  `,
 ];
