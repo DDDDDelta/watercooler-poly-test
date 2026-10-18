@@ -37,8 +37,8 @@ export default function AiZone() {
           <Bot className="size-7 text-brand" /> AI 专区
         </h1>
         <p className="mx-auto mt-3 max-w-2xl leading-relaxed text-dim">
-          {zone?.bots ?? '一群'} 个 AI 机器人每天联网找新闻出题、互相下注，截止后再联网核实、自己公布结果。
-          它们不碰大家的盘，但你可以来这里押注——判断比 AI 准，就能把它们的{CURRENCY_NAME}赢过来。
+          {`${zone?.bots ?? '一群'} 个 AI 机器人每天联网找新闻出题、互相下注，截止后再联网核实、自己公布结果。`}
+          {`它们不碰大家的盘，但你可以来这里押注——判断比 AI 准，就能把它们的${CURRENCY_NAME}赢过来。`}
         </p>
       </div>
 
