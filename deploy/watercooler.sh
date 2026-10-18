@@ -1,30 +1,40 @@
 #!/usr/bin/env bash
-# Runs the Watercooler server in the background without systemd.
+# Runs one Watercooler instance in the background without systemd.
 #
-#   ~/watercooler/watercooler.sh start|stop|restart|status|logs
+#   ~/<instance>/<instance>.sh start|stop|restart|status|logs   e.g. ~/gang-bet/gang-bet.sh restart
 #
-# Every deploy copies this script to <app-dir>/watercooler.sh and calls `restart`.
-# It runs <app-dir>/current; the pid file and logs live in <app-dir>/shared/.
+# Every deploy copies this script to <app-dir>/<instance>.sh and calls `restart`.
+# It runs <app-dir>/current; the database, pid file and logs live in <app-dir>/shared/.
 set -euo pipefail
 
 APP_DIR=${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}
-PID_FILE="$APP_DIR/shared/watercooler.pid"
-LOG_DIR="$APP_DIR/shared/logs"
-LOG_FILE="$LOG_DIR/watercooler.log"
 ENTRY=apps/server/dist/index.js
+
+# Instance settings (INSTANCE, PORT, BASE_PATH) are written into every release by
+# .github/workflows/deploy.yml, so they always match how that release was built.
+# The defaults cover releases built before instance.env existed.
+INSTANCE=watercooler
+PORT=3000
+BASE_PATH=/watercooler
+if [ -f "$APP_DIR/current/instance.env" ]; then
+  # shellcheck source=/dev/null
+  . "$APP_DIR/current/instance.env"
+fi
+
+PID_FILE="$APP_DIR/shared/$INSTANCE.pid"
+LOG_DIR="$APP_DIR/shared/logs"
+LOG_FILE="$LOG_DIR/$INSTANCE.log"
 
 # Runtime settings. Optional extras (INVITE_CODE, PRIVATE_MODE, ...) go in shared/.env, which the
 # app loads itself; the values exported here take precedence over it.
 export NODE_ENV=production
 # Only reachable through nginx, never directly from the internet.
 export HOST=127.0.0.1
-export PORT=3000
-# Must match BASE_PATH in .github/workflows/deploy.yml (used for the login cookie path).
-export BASE_PATH=/watercooler
-export DATABASE_PATH="$APP_DIR/shared/data/watercooler.db"
+export PORT BASE_PATH
+export DATABASE_PATH="$APP_DIR/shared/data/$INSTANCE.db"
 
 die() {
-  echo "watercooler: $*" >&2
+  echo "$INSTANCE: $*" >&2
   exit 1
 }
 

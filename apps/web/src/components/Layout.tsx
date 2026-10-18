@@ -44,7 +44,7 @@ export function Logo({ compact }: { compact?: boolean }) {
         </svg>
       </span>
       <span className={clsx('leading-none', compact && 'hidden sm:block')}>
-        <span className="block text-[17px] font-bold tracking-tight text-fg">Watercooler</span>
+        <span className="block text-[17px] font-bold tracking-tight text-fg">{import.meta.env.SITE_NAME}</span>
         <span className="mt-1 block text-[10px] tracking-[0.25em] text-faint">茶水间预测市场</span>
       </span>
     </Link>
@@ -393,7 +393,7 @@ function Footer() {
         </div>
       </div>
       <div className="border-t border-line py-5 text-center text-xs text-faint">
-        Watercooler · 仅供同事间娱乐，{CURRENCY_NAME}没有任何现实价值
+        {import.meta.env.SITE_NAME} · 仅供同事间娱乐，{CURRENCY_NAME}没有任何现实价值
       </div>
     </footer>
   );

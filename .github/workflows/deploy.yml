@@ -1,7 +1,8 @@
 name: Deploy
 
 # Builds on GitHub, uploads the build to the server over SSH and activates it with
-# deploy/remote-deploy.sh. One-time server setup and the secrets are described in deploy/README.md.
+# deploy/remote-deploy.sh, once per instance. One-time server setup and the secrets are described
+# in deploy/README.md.
 on:
   push:
     branches: [main]
@@ -16,15 +17,31 @@ permissions:
 
 jobs:
   deploy:
-    name: Build and deploy
+    name: Deploy ${{ matrix.instance }}
     runs-on: ubuntu-latest
     environment: production
+    strategy:
+      # A failed (and rolled back) instance must not cancel the other one.
+      fail-fast: false
+      matrix:
+        # The same code runs as several independent instances, each with its own directory
+        # (~/<instance>), database, port and URL prefix. nginx proxies https://<domain><base_path>/
+        # to 127.0.0.1:<port> and strips the prefix (see deploy/README.md).
+        include:
+          - instance: watercooler
+            base_path: /watercooler
+            port: 3000
+            site_name: Watercooler
+          - instance: gang-bet
+            base_path: /gang-bet
+            port: 3001
+            site_name: gang-bet
     env:
-      # Where the app lives on the server: ~/watercooler in the home directory of DEPLOY_USER.
-      DEPLOY_DIR: ~/watercooler
-      # URL prefix the site is served under (https://<domain>/watercooler/). nginx strips it before
-      # proxying; keep it in sync with BASE_PATH in deploy/watercooler.sh.
-      BASE_PATH: /watercooler
+      INSTANCE: ${{ matrix.instance }}
+      # Where the instance lives on the server, in the home directory of DEPLOY_USER.
+      DEPLOY_DIR: ~/${{ matrix.instance }}
+      BASE_PATH: ${{ matrix.base_path }}
+      SITE_NAME: ${{ matrix.site_name }}
     steps:
       - uses: actions/checkout@v5
 
@@ -41,7 +58,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
-      - name: Build (base path ${{ env.BASE_PATH }})
+      - name: Build (base path ${{ env.BASE_PATH }}, site name ${{ env.SITE_NAME }})
         run: pnpm build
 
       - name: Package release
@@ -50,12 +67,18 @@ jobs:
           echo "RELEASE=$RELEASE" >> "$GITHUB_ENV"
           # ssh and scp resolve paths without a leading "/" against the remote home directory.
           echo "REMOTE_DIR=${DEPLOY_DIR#\~/}" >> "$GITHUB_ENV"
+          # Read by remote-deploy.sh and the control script on the server.
+          cat > instance.env <<ENV
+          INSTANCE=$INSTANCE
+          PORT=${{ matrix.port }}
+          BASE_PATH=$BASE_PATH
+          ENV
           tar -czf release.tgz \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             apps/server/package.json apps/server/dist \
             apps/web/package.json apps/web/dist \
             packages/shared/package.json \
-            deploy/watercooler.sh
+            deploy/watercooler.sh instance.env
 
       - name: Configure SSH
         env:
@@ -101,11 +124,14 @@ jobs:
         env:
           APP_URL: ${{ vars.APP_URL }}
         run: |
+          # APP_URL is the site, e.g. https://ky-z.com; any path in it is ignored.
+          origin=$(printf '%s' "$APP_URL" | grep -oE '^https?://[^/]+')
           prefix="/${BASE_PATH#/}"
           prefix="${prefix%/}"
-          curl -fsS --retry 5 --retry-delay 3 "${APP_URL%/}/api/config"
+          url="$origin$prefix"
+          curl -fsS --retry 5 --retry-delay 3 "$url/api/config"
           echo
-          curl -fsS "${APP_URL%/}/" | grep -q "$prefix/assets/" || {
+          curl -fsS "$url/" | grep -q "$prefix/assets/" || {
             echo "::error::index.html does not reference $prefix/assets/ (wrong BASE_PATH?)"
             exit 1
           }

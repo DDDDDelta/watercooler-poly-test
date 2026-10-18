@@ -4,22 +4,24 @@
 #
 #   ssh server "bash -l -s -- <app-dir> <release>" < deploy/remote-deploy.sh
 #
-# <app-dir> may be absolute or relative to the deploy user's home (e.g. "watercooler" = ~/watercooler).
+# <app-dir> may be absolute or relative to the deploy user's home (e.g. "gang-bet" = ~/gang-bet).
+# The release's instance.env names the instance (INSTANCE, PORT, BASE_PATH).
 # Layout under <app-dir>:
 #   releases/<release>/   unpacked builds (the newest $KEEP_RELEASES are kept)
 #   current -> releases/  the release the service runs
 #   shared/data/          SQLite database, survives deploys
-#   shared/logs/          app log (see watercooler.sh logs)
+#   shared/logs/          app log (see <instance>.sh logs)
 #   shared/.env           optional settings (INVITE_CODE, ...), linked into every release
-#   watercooler.sh        start/stop/restart script, refreshed from deploy/watercooler.sh on every deploy
+#   <instance>.sh         start/stop/restart script, refreshed from deploy/watercooler.sh on every deploy
 set -euo pipefail
 
 usage='usage: remote-deploy.sh <app-dir> <release>'
 APP_DIR=${1:?$usage}
 RELEASE=${2:?$usage}
-# Defaults to "<app-dir>/watercooler.sh restart"; override to manage the process another way.
+# Defaults to "<app-dir>/<instance>.sh restart"; override to manage the process another way.
 RESTART_CMD=${RESTART_CMD:-}
-HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:3000/api/config}
+# Defaults to the instance's /api/config on 127.0.0.1.
+HEALTH_URL=${HEALTH_URL:-}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
 
 # Node usually comes from nvm, which a non-interactive SSH shell doesn't load by itself.
@@ -53,7 +55,6 @@ case $APP_DIR in
 esac
 mkdir -p "$APP_DIR"
 APP_DIR=$(cd "$APP_DIR" && pwd -P)
-RESTART_CMD=${RESTART_CMD:-"$APP_DIR/watercooler.sh restart"}
 RELEASES="$APP_DIR/releases"
 TARGET="$RELEASES/$RELEASE"
 
@@ -61,6 +62,17 @@ echo "==> Unpacking $RELEASE"
 mkdir -p "$TARGET" "$APP_DIR/shared/data"
 tar -xzf "$TARGET.tgz" -C "$TARGET"
 rm -f "$TARGET.tgz"
+
+[ -f "$TARGET/instance.env" ] || {
+  echo "!! $RELEASE has no instance.env" >&2
+  exit 1
+}
+# shellcheck source=/dev/null
+. "$TARGET/instance.env"
+CONTROL="$APP_DIR/$INSTANCE.sh"
+RESTART_CMD=${RESTART_CMD:-"$CONTROL restart"}
+HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:$PORT/api/config}
+echo "==> Instance $INSTANCE (port $PORT, base path $BASE_PATH)"
 
 echo "==> Installing production dependencies"
 cd "$TARGET"
@@ -75,7 +87,7 @@ fi
 # The app loads <release>/.env at startup; point it at the shared one (a missing file is ignored).
 ln -sfn "$APP_DIR/shared/.env" "$TARGET/.env"
 # A stable copy of the control script, so it also works for rolling back to older releases.
-install -m 755 "$TARGET/deploy/watercooler.sh" "$APP_DIR/watercooler.sh"
+install -m 755 "$TARGET/deploy/watercooler.sh" "$CONTROL"
 
 activate() {
   ln -sfn "$1" "$APP_DIR/current.tmp"
@@ -108,7 +120,7 @@ fi
 
 if [ -n "$failure" ]; then
   echo "!! $failure" >&2
-  tail -n 40 "$APP_DIR/shared/logs/watercooler.log" 2>/dev/null || true
+  tail -n 40 "$APP_DIR/shared/logs/$INSTANCE.log" 2>/dev/null || true
   if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$TARGET" ]; then
     echo "!! Rolling back to $(basename "$previous")" >&2
     activate "$previous"

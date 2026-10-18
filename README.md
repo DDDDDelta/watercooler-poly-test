@@ -59,7 +59,7 @@ pnpm dev         # 前端 http://localhost:5173 ，API http://localhost:3000
 
 ### GitHub Actions 自动部署
 
-推送到 `main` 后自动构建、测试并通过 SSH 部署到服务器（后台脚本运行 + nginx 反向代理，支持部署在子路径下，失败自动回滚，不需要 systemd 和 sudo）。服务器一次性准备和需要配置的 Secrets 见 [`deploy/README.md`](deploy/README.md)。
+推送到 `main` 后自动构建、测试并通过 SSH 部署到服务器（后台脚本运行 + nginx 反向代理，支持部署在子路径下，失败自动回滚，不需要 systemd 和 sudo）。同一份代码部署成两个互相独立的实例：`/watercooler` 和 `/gang-bet`，各用各的数据库。服务器一次性准备、需要配置的 Secrets 和怎么再加实例见 [`deploy/README.md`](deploy/README.md)。
 
 ### 直接运行
 
@@ -100,6 +100,7 @@ sqlite3 data/watercooler.db ".backup 'backup-$(date +%F).db'"
 | `PORT`               | `3000`                | 服务端口                                                                |
 | `BASE_PATH`          | 无（站点根目录）      | 部署在子路径下时设置，如 `/watercooler`；**构建前端和运行服务时都要设** |
 | `DATABASE_PATH`      | `data/watercooler.db` | SQLite 文件路径                                                         |
+| `SITE_NAME`          | `Watercooler`         | 站点名称（logo、页脚、网页标题），**构建前端时设**                      |
 | `INVITE_CODE`        | 无                    | 设置后注册必须填写邀请码                                                |
 | `STARTING_BALANCE`   | `1000`                | 注册赠送水滴                                                            |
 | `DAILY_BONUS`        | `100`                 | 每日签到奖励，`0` 关闭                                                  |

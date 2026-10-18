@@ -9,8 +9,13 @@ import { defineConfig } from 'vite';
 const trimmed = (process.env.BASE_PATH ?? '').replace(/^\/+|\/+$/g, '');
 const base = trimmed ? `/${trimmed}/` : '/';
 
+/** Name in the logo, footer and page title, e.g. SITE_NAME=gang-bet for a second instance. */
+const siteName = process.env.SITE_NAME?.trim() || 'Watercooler';
+
 export default defineConfig({
   base,
+  // Also replaces %SITE_NAME% in index.html.
+  define: { 'import.meta.env.SITE_NAME': JSON.stringify(siteName) },
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,

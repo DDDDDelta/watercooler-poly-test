@@ -1,58 +1,69 @@
 # 部署到服务器（GitHub Actions）
 
-推送到 `main` 分支，或者在 GitHub 的 **Actions → Deploy → Run workflow** 手动触发，就会自动部署：
+同一份代码在服务器上跑成多个**互相独立的实例**，每个实例有自己的目录、端口、访问路径和数据库（账号、市场、水滴都不互通）：
 
-1. 在 GitHub 上安装依赖、跑类型检查和测试，用 `BASE_PATH=/watercooler` 构建前后端
-2. 通过 SSH 上传到服务器上部署用户家目录下的 `~/watercooler/releases/<时间>-<commit>/`
+| 实例          | 访问地址                        | 服务器目录      | 端口   | 站点名称      |
+| ------------- | ------------------------------- | --------------- | ------ | ------------- |
+| `watercooler` | `https://ky-z.com/watercooler/` | `~/watercooler` | `3000` | `Watercooler` |
+| `gang-bet`    | `https://ky-z.com/gang-bet/`    | `~/gang-bet`    | `3001` | `gang-bet`    |
+
+实例列表写在 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) 的 `matrix.include` 里。推送到 `main` 分支，或者在 GitHub 的 **Actions → Deploy → Run workflow** 手动触发，每个实例各跑一个部署任务（一个失败不影响另一个）：
+
+1. 在 GitHub 上安装依赖、跑类型检查和测试，用这个实例的 `BASE_PATH`（如 `/gang-bet`）和 `SITE_NAME` 构建前后端
+2. 通过 SSH 上传到服务器上部署用户家目录下的 `~/<实例>/releases/<时间>-<commit>/`
 3. 在服务器上安装生产依赖（用 nvm 的 Node；`better-sqlite3` 是原生模块，在服务器上安装才能和服务器的 Node 版本匹配）
-4. 把 `~/watercooler/current` 指向新版本，用 `~/watercooler/watercooler.sh restart` 在后台重启
-5. 检查 `http://127.0.0.1:3000/api/config`；如果没起来，**自动切回上一个版本**并让 workflow 失败
+4. 把 `~/<实例>/current` 指向新版本，用 `~/<实例>/<实例>.sh restart` 在后台重启
+5. 检查 `http://127.0.0.1:<端口>/api/config`；如果没起来，**自动切回上一个版本**并让这个任务失败
 
-不用 systemd，也不需要 sudo：进程由 `watercooler.sh` 用 `nohup` 在后台运行，pid 和日志放在 `shared/` 里。
+不用 systemd，也不需要 sudo：进程由控制脚本用 `nohup` 在后台运行，pid 和日志放在 `shared/` 里。
 
-服务器上的目录结构（`~` 是 `DEPLOY_USER` 的家目录）：
+服务器上的目录结构（`~` 是 `DEPLOY_USER` 的家目录），以 `gang-bet` 为例：
 
 ```
-~/watercooler/
-  watercooler.sh                启动/停止/重启脚本（每次部署自动更新）
+~/gang-bet/
+  gang-bet.sh                   启动/停止/重启脚本（每次部署自动更新）
   current -> releases/20261017093000-1a2b3c4   正在运行的版本
   releases/                     最近 5 个版本
-  shared/data/watercooler.db    数据库（部署不会动它）
-  shared/logs/watercooler.log   日志（超过 10 MB 自动轮转）
-  shared/watercooler.pid        进程号
+  shared/data/gang-bet.db       数据库（部署不会动它）
+  shared/logs/gang-bet.log      日志（超过 10 MB 自动轮转）
+  shared/gang-bet.pid           进程号
   shared/.env                   可选配置（邀请码等）
 ```
 
-运行参数写在 [`deploy/watercooler.sh`](watercooler.sh) 顶部：`HOST=127.0.0.1`（只监听本机，必须经过 nginx）、`PORT=3000`、`BASE_PATH=/watercooler`、数据库路径。
+`~/watercooler/` 完全一样，文件名换成 `watercooler`。
+
+每个版本里有一个部署时生成的 `instance.env`（`INSTANCE`、`PORT`、`BASE_PATH`），控制脚本 [`deploy/watercooler.sh`](watercooler.sh) 从这里读端口和路径，所以运行参数总是和构建时一致。另外固定 `HOST=127.0.0.1`（只监听本机，必须经过 nginx）。
 
 ## 一、服务器一次性准备
 
 全部以**部署用户**（`DEPLOY_USER`）身份执行，不需要 root：
 
 ```bash
-# 1. 用 nvm 装 Node 22，并设为默认版本（部署脚本和 watercooler.sh 会自动加载 ~/.nvm/nvm.sh）
+# 1. 用 nvm 装 Node 22，并设为默认版本（部署脚本和控制脚本会自动加载 ~/.nvm/nvm.sh）
 nvm install 22
 nvm alias default 22
 
-# 2. 服务器重启后自动拉起（第一次部署之前加也没关系）
+# 2. 服务器重启后自动拉起（每个实例一行；第一次部署之前加也没关系）
 (crontab -l 2>/dev/null; echo '@reboot $HOME/watercooler/watercooler.sh start') | crontab -
+(crontab -l 2>/dev/null; echo '@reboot $HOME/gang-bet/gang-bet.sh start') | crontab -
 
-# 3. 可选：额外配置，比如邀请码
-mkdir -p ~/watercooler/shared
-tee ~/watercooler/shared/.env <<'CONF'
+# 3. 可选：额外配置，比如邀请码（每个实例单独一份）
+mkdir -p ~/gang-bet/shared
+tee ~/gang-bet/shared/.env <<'CONF'
 INVITE_CODE=换成你的邀请码
 # ADMIN_USERNAMES=你的用户名
 # PRIVATE_MODE=true
 CONF
 ```
 
-改完 `.env` 后执行 `~/watercooler/watercooler.sh restart` 生效。`watercooler.sh` 里写死的 `HOST`、`PORT` 等不会被 `.env` 覆盖。
+改完 `.env` 后执行 `~/<实例>/<实例>.sh restart` 生效。`HOST`、`PORT`、`BASE_PATH`、数据库路径由控制脚本决定，不会被 `.env` 覆盖。
 
 注意：
 
 - nvm 是按用户安装的，必须装在 `DEPLOY_USER` 这个账号下。
 - 服务器要能访问 npm 仓库来安装依赖。`better-sqlite3` 会从 GitHub 下载预编译文件，下载失败时会从源码编译，需要 `python3`、`make`、`g++`（`sudo apt install -y build-essential python3`）。
-- 本机 3000 端口不能被别的程序占用。
+- 每个实例的端口（3000、3001）不能被别的程序占用。
+- 每个实例**第一个注册的用户自动成为管理员**，新实例上线后自己先去注册。
 - 如果发现 SSH 断开后进程被杀（`/etc/systemd/logind.conf` 里 `KillUserProcesses=yes`），执行 `sudo loginctl enable-linger <部署用户>`。Ubuntu 默认不会杀。
 
 ## 二、SSH 密钥
@@ -68,6 +79,8 @@ ssh-copy-id -i watercooler_deploy.pub deploy@ky-z.com
 # 记下服务器的主机公钥，用于 DEPLOY_KNOWN_HOSTS（防止中间人攻击）
 ssh-keyscan -p 22 ky-z.com
 ```
+
+所有实例共用这一套密钥和 Secrets。
 
 ## 三、GitHub 配置
 
@@ -85,11 +98,9 @@ ssh-keyscan -p 22 ky-z.com
 
 **Variables**（可选）
 
-| 名称      | 说明                                                                       |
-| --------- | -------------------------------------------------------------------------- |
-| `APP_URL` | 如 `https://ky-z.com/watercooler/`，设置后部署完会从公网访问一次做冒烟测试 |
-
-部署目录和子路径直接写在 `.github/workflows/deploy.yml` 顶部：`DEPLOY_DIR: ~/watercooler`、`BASE_PATH: /watercooler`。要改的话，`deploy/watercooler.sh` 里的 `BASE_PATH`（以及 nginx）要一起改。
+| 名称      | 说明                                                                                    |
+| --------- | --------------------------------------------------------------------------------------- |
+| `APP_URL` | 站点地址，如 `https://ky-z.com`，设置后部署完会从公网访问每个实例的子路径一次做冒烟测试 |
 
 `DEPLOY_KNOWN_HOSTS` 直接粘贴 `ssh-keyscan` 的全部输出即可（`ssh-rsa`、`ecdsa-sha2-nistp256`、`ssh-ed25519` 几行都要，`#` 开头的注释行留着也没关系）。
 
@@ -97,7 +108,7 @@ workflow 使用名为 `production` 的 environment（第一次运行时 GitHub �
 
 ## 四、nginx
 
-nginx 负责 HTTPS，并在转发时去掉 `/watercooler` 前缀：
+nginx 负责 HTTPS，并在转发时去掉子路径前缀。每个实例一组 `location`：
 
 ```nginx
 location = /watercooler {
@@ -110,26 +121,43 @@ location /watercooler/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
+
+location = /gang-bet {
+    return 301 /gang-bet/;
+}
+
+location /gang-bet/ {
+    proxy_pass http://127.0.0.1:3001/;   # 末尾的 / 会把 /gang-bet 前缀去掉
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
-`X-Forwarded-Proto` 让登录 Cookie 在 HTTPS 下带上 `Secure` 标记，`X-Forwarded-For` 用于按 IP 限制注册频率。
+`X-Forwarded-Proto` 让登录 Cookie 在 HTTPS 下带上 `Secure` 标记，`X-Forwarded-For` 用于按 IP 限制注册频率。登录 Cookie 的 path 是各自的子路径，所以两个实例的登录状态互不影响。
 
-## 五、日常运维
+## 五、再加一个实例
 
-以部署用户身份：
+1. 在 `deploy.yml` 的 `matrix.include` 里加一项：`instance`（目录名）、`base_path`、`port`（没被占用的端口）、`site_name`
+2. 服务器上：nginx 加一组 `location`（同上），crontab 加一行 `@reboot $HOME/<实例>/<实例>.sh start`
+3. 推送到 `main`，自己先去注册（第一个用户是管理员）
+
+## 六、日常运维
+
+以部署用户身份（把 `gang-bet` 换成要操作的实例）：
 
 ```bash
-~/watercooler/watercooler.sh status      # 是否在运行
-~/watercooler/watercooler.sh logs        # 跟踪日志
-~/watercooler/watercooler.sh restart     # 重启（也有 start / stop）
-ls ~/watercooler/releases                # 已部署的版本
+~/gang-bet/gang-bet.sh status      # 是否在运行
+~/gang-bet/gang-bet.sh logs        # 跟踪日志
+~/gang-bet/gang-bet.sh restart     # 重启（也有 start / stop）
+ls ~/gang-bet/releases             # 已部署的版本
 
 # 手动回滚到某个版本
-ln -sfn ~/watercooler/releases/<版本> ~/watercooler/current
-~/watercooler/watercooler.sh restart
+ln -sfn ~/gang-bet/releases/<版本> ~/gang-bet/current
+~/gang-bet/gang-bet.sh restart
 
 # 备份数据库（WAL 模式，不要直接复制 db 文件）
-sqlite3 ~/watercooler/shared/data/watercooler.db ".backup '$HOME/watercooler/shared/backup-$(date +%F).db'"
+sqlite3 ~/gang-bet/shared/data/gang-bet.db ".backup '$HOME/gang-bet/shared/backup-$(date +%F).db'"
 ```
 
-第一个注册的用户自动成为管理员；也可以在 `shared/.env` 里用 `ADMIN_USERNAMES` 指定。
+也可以在 `shared/.env` 里用 `ADMIN_USERNAMES` 指定管理员。
