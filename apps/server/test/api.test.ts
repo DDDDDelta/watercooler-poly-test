@@ -127,7 +127,7 @@ function expectMoneyConserved(env: Env) {
 }
 
 describe('betting', () => {
-  it('stakes go into pools, the pot shares are the odds, and creators cannot bet', async () => {
+  it('stakes go into pools and the pot shares are the odds', async () => {
     const env = setup();
     const alice = await env.register('alice');
     const bob = await env.register('bob');
@@ -138,9 +138,6 @@ describe('betting', () => {
     const fresh = (await bob.get(`/markets/${id}`)).body.market;
     expect(fresh.outcomes.map((o: any) => o.probability)).toEqual([0.5, 0.5]);
     expect(fresh.pot).toBe(0);
-
-    const own = await alice.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 10 });
-    expect(own.status).toBe(403);
 
     const b1 = await bob.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 200 });
     expect(b1.status).toBe(200);
@@ -200,6 +197,20 @@ describe('betting', () => {
     expect((await alice.post(`/markets/${id}/resolve`, { outcomeId: b })).status).toBe(409);
     expect((await alice.post(`/markets/${id}/cancel`, {})).status).toBe(409);
     expect((await bob.post(`/markets/${id}/bets`, { outcomeId: a, amount: 10 })).status).toBe(409);
+  });
+
+  it('lets the creator bet in their own market', async () => {
+    const env = setup();
+    const alice = await env.register('alice');
+    const bob = await env.register('bob');
+    const id = await makeMarket(env, alice);
+    const [yes, no] = await outcomeIds(alice, id);
+    expect((await alice.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 100 })).status).toBe(200);
+    await bob.post(`/markets/${id}/bets`, { outcomeId: no, amount: 100 });
+    await alice.post(`/markets/${id}/resolve`, { outcomeId: yes });
+    expect(await balance(alice)).toBe(1100);
+    expect(await balance(bob)).toBe(900);
+    expectMoneyConserved(env);
   });
 
   it('splits odd pots to the exact cent', async () => {

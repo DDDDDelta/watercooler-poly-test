@@ -90,8 +90,6 @@ export function BetPanel({
   });
 
   if (market.status !== 'open') return <ClosedPanel market={market} />;
-  // The creator announces the result, so they get the creator panel instead of a bet form.
-  if (me?.id === market.creator.id) return null;
 
   const balance = me?.balance ?? 0;
   const insufficient = amountNum > balance;

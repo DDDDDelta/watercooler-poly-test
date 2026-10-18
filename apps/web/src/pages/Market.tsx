@@ -410,7 +410,6 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
         <Gavel className="size-4" /> 你是创建者
       </h3>
       <p className="mt-1.5 text-xs leading-relaxed text-faint">
-        结果由你来公布，所以你不能在自己的市场下注。
         {market.status === 'closed'
           ? `下注已截止，请在 ${formatDate(market.resolveBy)} 前公布结果，否则市场自动取消并全额退款。`
           : `结果确定后就可以公布，公布后立即停止下注；截止后最晚 ${formatDate(market.resolveBy)} 前公布。`}

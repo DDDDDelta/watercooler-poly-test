@@ -214,7 +214,7 @@ const events = created
   .sort((a, b) => a.t - b.t);
 
 for (const { m, t } of events) {
-  const bettor = pick(userIds.filter((id) => id !== m.creatorId));
+  const bettor = pick(userIds);
   const outcomes = getOutcomeRows(db, m.marketId);
   // Back an outcome with the crowd's odds, staking a random amount.
   let r = rand();

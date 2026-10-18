@@ -244,8 +244,7 @@ export default function CreateMarket() {
           <div className="flex gap-2.5 rounded bg-raised p-3.5 text-xs leading-relaxed text-dim">
             <Gavel className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
-              结果由你来公布，所以你不能在自己的市场下注。截止后 {RESOLVE_GRACE_DAYS}{' '}
-              天内没有公布，市场会自动取消并全额退款。
+              结果由你来公布，你自己也可以下注。截止后 {RESOLVE_GRACE_DAYS} 天内没有公布，市场会自动取消并全额退款。
             </span>
           </div>
           {firstError && (question || options.some(Boolean)) && (

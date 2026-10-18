@@ -125,7 +125,6 @@ export function placeBet(db: DB, userId: number, marketId: number, input: BetInp
   return db.transaction(() => {
     const market = getMarketRow(db, marketId);
     if (!isBettable(market, now)) throw conflict('该市场已停止下注');
-    if (market.creator_id === userId) throw forbidden('你是这个市场的创建者，要负责公布结果，不能下注');
     const outcomes = getOutcomeRows(db, marketId);
     const outcome = outcomes.find((o) => o.id === input.outcomeId);
     if (!outcome) throw notFound('选项不存在');
