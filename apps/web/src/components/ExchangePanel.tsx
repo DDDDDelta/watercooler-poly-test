@@ -115,6 +115,45 @@ export function ExchangePanel({
           最新成交：{book.lastPrice === null ? '暂无' : book.lastPrice.toFixed(2)}
           。盘口包含互补订单，点击价格可填单；自己的订单不会与自己成交。
         </p>
+        {me && (
+          <section className="border-t border-line pt-4">
+            <h3 className="mb-2 font-semibold">
+              我的订单 · 未成交 {data.orders.filter((o) => o.status === 'open').length} 笔
+            </h3>
+            <p className="mb-2 text-xs text-faint">撤单释放未成交部分的冻结资金或份额，已成交部分保留。</p>
+            <ul className="max-h-48 divide-y divide-line overflow-y-auto">
+              {data.orders.map((o) => (
+                <li key={o.id} className="py-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      #{o.id} {o.side === 'buy' ? '买' : '卖'}{' '}
+                      {market.outcomes.find((x) => x.id === o.outcomeId)?.label} @ {o.price.toFixed(2)}
+                      {o.postOnly && ' · Post-only'}
+                    </span>
+                    {o.status === 'open' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        aria-label={`撤销订单 #${o.id}`}
+                        loading={action.isPending}
+                        onClick={() => action.mutate(() => api.cancelOrder(market.id, o.id))}
+                      >
+                        撤单
+                      </Button>
+                    ) : (
+                      <span className="text-faint">{o.status === 'filled' ? '全部成交' : '已撤销'}</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-faint">
+                    已成交 {o.quantity - o.remaining} / {o.quantity} 份{o.status === 'open' && ` · 剩余 ${o.remaining}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            {!data.orders.length && <p className="text-xs text-faint">暂无订单</p>}
+          </section>
+        )}
         {open ? (
           me ? (
             <form
@@ -261,40 +300,6 @@ export function ExchangePanel({
           {market.status !== 'open' && market.status !== 'closed' && (
             <p className="text-xs text-faint">以上数量为结算前持仓记录，已兑付，不能再交易。</p>
           )}
-        </Card>
-      )}
-      {me && (
-        <Card className="p-5">
-          <h2 className="mb-3 font-semibold">我的订单</h2>
-          <ul className="max-h-80 divide-y divide-line overflow-y-auto">
-            {data.orders.map((o) => (
-              <li key={o.id} className="py-3 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span>
-                    #{o.id} {o.side === 'buy' ? '买' : '卖'} {market.outcomes.find((x) => x.id === o.outcomeId)?.label}{' '}
-                    @ {o.price.toFixed(2)}
-                    {o.postOnly && ' · Post-only'}
-                  </span>
-                  {o.status === 'open' ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      loading={action.isPending}
-                      onClick={() => action.mutate(() => api.cancelOrder(market.id, o.id))}
-                    >
-                      撤单
-                    </Button>
-                  ) : (
-                    <span className="text-faint">{o.status === 'filled' ? '全部成交' : '已撤销'}</span>
-                  )}
-                </div>
-                <p className="mt-1 text-faint">
-                  已成交 {o.quantity - o.remaining} / {o.quantity} 份{o.status === 'open' && ` · 剩余 ${o.remaining}`}
-                </p>
-              </li>
-            ))}
-          </ul>
-          {!data.orders.length && <p className="text-xs text-faint">暂无订单</p>}
         </Card>
       )}
       <Card className="p-5">

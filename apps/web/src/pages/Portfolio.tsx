@@ -1,12 +1,13 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LedgerKind } from '@watercooler/shared';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Money } from '../components/Money';
 import { BetsTable } from '../components/BetsTable';
 import { Button, Card, PageLoader, Segmented, Stat } from '../components/ui';
-import { api } from '../lib/api';
+import { api, errorMessage } from '../lib/api';
 import { formatDate, formatSigned } from '../lib/format';
 
 const LEDGER_LABEL: Record<LedgerKind, string> = {
@@ -69,6 +70,18 @@ function Ledger() {
 
 export default function PortfolioPage() {
   const [tab, setTab] = useState<'active' | 'closed' | 'ledger'>('active');
+  const qc = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: ({ marketId, orderId }: { marketId: number; orderId: number }) => api.cancelOrder(marketId, orderId),
+    onSuccess: () => {
+      toast.success('订单已撤销，剩余冻结资产已释放');
+      void qc.invalidateQueries();
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      void qc.invalidateQueries();
+    },
+  });
   const { data } = useQuery({ queryKey: ['portfolio'], queryFn: api.portfolio, refetchInterval: 15_000 });
   if (!data) return <PageLoader />;
   const { stats, bets } = data;
@@ -99,14 +112,29 @@ export default function PortfolioPage() {
           <h2 className="font-semibold">Polymarket 未成交订单</h2>
           <ul className="mt-3 divide-y divide-line">
             {data.exchangeOrders.map((o) => (
-              <li key={o.id} className="py-3 text-sm">
-                <Link to={`/market/${o.marketId}`} className="text-brand">
-                  {o.question}
-                </Link>
-                <p className="mt-1 text-xs text-dim">
-                  {o.side === 'buy' ? '买' : '卖'} {o.outcomeLabel} @ {o.price.toFixed(2)} · 剩余 {o.remaining} 份 ·{' '}
-                  {o.side === 'buy' ? `冻结 ${(o.price * o.remaining).toFixed(2)} 水滴` : `冻结 ${o.remaining} 份`}
-                </p>
+              <li key={o.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                <div className="min-w-0">
+                  <Link to={`/market/${o.marketId}`} className="text-brand">
+                    {o.question}
+                  </Link>
+                  <p className="mt-1 text-xs text-dim">
+                    #{o.id} {o.side === 'buy' ? '买' : '卖'} {o.outcomeLabel} @ {o.price.toFixed(2)} · 剩余{' '}
+                    {o.remaining} 份 ·{' '}
+                    {o.side === 'buy' ? `冻结 ${(o.price * o.remaining).toFixed(2)} 水滴` : `冻结 ${o.remaining} 份`}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={cancel.isPending}
+                  loading={cancel.isPending && cancel.variables?.orderId === o.id}
+                  aria-label={`撤销订单 #${o.id}`}
+                  onClick={() => cancel.mutate({ marketId: o.marketId, orderId: o.id })}
+                >
+                  撤单
+                </Button>
               </li>
             ))}
           </ul>
