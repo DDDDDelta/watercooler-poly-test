@@ -13,6 +13,7 @@ import { api, type MarketFilter, type MarketSort } from '../lib/api';
 import { useConfig, useMe } from '../lib/auth';
 import { outcomeColor } from '../lib/colors';
 import { formatCompact, formatPct, formatRelative, formatSigned } from '../lib/format';
+import { COPY } from '../lib/site';
 
 const PriceChart = lazy(() => import('../components/PriceChart'));
 
@@ -114,12 +115,12 @@ function Hero() {
             {stats ? `${stats.openMarkets} 个市场正在交易` : '实时交易中'}
           </div>
           <h1 className="mt-6 text-4xl leading-tight font-semibold text-fg sm:text-[44px] sm:leading-[1.4]">
-            把茶水间的八卦
+            {COPY.heroLead}
             <br />
             变成<span className="text-brand">概率</span>
           </h1>
           <p className="mt-4 max-w-lg text-base leading-relaxed text-dim">
-            团建去哪、周会多久、指数收在几点……用{CURRENCY_NAME}押注你的判断。价格就是大家的集体预期，猜对了，
+            {COPY.heroTopics}……用{CURRENCY_NAME}押注你的判断。价格就是大家的集体预期，猜对了，
             {CURRENCY_NAME}归你。
           </p>
           <div className="mt-8 flex flex-wrap gap-3">

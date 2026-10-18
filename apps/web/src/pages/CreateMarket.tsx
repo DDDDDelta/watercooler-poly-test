@@ -20,6 +20,7 @@ import { Button, Card, Field, Input, Textarea } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useConfig, useMe } from '../lib/auth';
 import { formatMoney } from '../lib/format';
+import { COPY } from '../lib/site';
 
 /** datetime-local value (local time) for a timestamp. */
 function toLocalInput(t: number): string {
@@ -123,7 +124,7 @@ export default function CreateMarket() {
             <Input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="例如：这周五下午茶会有奶茶吗？"
+              placeholder={COPY.questionPlaceholder}
               maxLength={200}
               autoFocus
             />
@@ -277,7 +278,7 @@ export default function CreateMarket() {
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="例如：以周五 15:00 茶水间实际出现的饮品为准……"
+              placeholder={COPY.criteriaPlaceholder}
               rows={4}
               maxLength={5000}
             />

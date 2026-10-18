@@ -9,6 +9,7 @@ import { Card, PageLoader, Segmented } from '../components/ui';
 import { api, type LeaderboardSort } from '../lib/api';
 import { useMe } from '../lib/auth';
 import { formatSigned } from '../lib/format';
+import { COPY } from '../lib/site';
 
 /** Podium order on screen is 2nd, 1st, 3rd. */
 const PODIUM = [
@@ -40,7 +41,7 @@ export default function Leaderboard() {
         <h1 className="section-title inline-flex items-center gap-2">
           <Trophy className="size-7 text-brand" /> 预言家排行榜
         </h1>
-        <p className="mt-3 text-dim">谁才是茶水间最准的那张嘴</p>
+        <p className="mt-3 text-dim">{COPY.leaderboardSubtitle}</p>
       </div>
       <Segmented
         variant="tabs"
@@ -109,7 +110,7 @@ export default function Leaderboard() {
             <div className="text-right font-mono">{metric(e)}</div>
           </Link>
         ))}
-        {data.length <= 3 && <div className="py-8 text-center text-sm text-faint">人还不够多，快拉同事来玩</div>}
+        {data.length <= 3 && <div className="py-8 text-center text-sm text-faint">{COPY.inviteMore}</div>}
       </Card>
     </div>
   );

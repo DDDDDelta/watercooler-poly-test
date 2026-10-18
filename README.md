@@ -101,6 +101,7 @@ sqlite3 data/watercooler.db ".backup 'backup-$(date +%F).db'"
 | `BASE_PATH`          | 无（站点根目录）      | 部署在子路径下时设置，如 `/watercooler`；**构建前端和运行服务时都要设** |
 | `DATABASE_PATH`      | `data/watercooler.db` | SQLite 文件路径                                                         |
 | `SITE_NAME`          | `Watercooler`         | 站点名称（logo、页脚、网页标题），**构建前端时设**                      |
+| `SITE_COPY`          | `watercooler`         | 文案风格：`watercooler`（茶水间）或 `neutral`（中性），**构建前端时设** |
 | `INVITE_CODE`        | 无                    | 设置后注册必须填写邀请码                                                |
 | `STARTING_BALANCE`   | `1000`                | 注册赠送水滴                                                            |
 | `DAILY_BONUS`        | `100`                 | 每日签到奖励，`0` 关闭                                                  |

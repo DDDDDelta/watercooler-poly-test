@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { SITE_COPY, type SiteCopyName } from './src/lib/site-copy';
 
 /**
  * Public URL prefix, e.g. BASE_PATH=/watercooler when served at https://example.com/watercooler/
@@ -12,10 +13,20 @@ const base = trimmed ? `/${trimmed}/` : '/';
 /** Name in the logo, footer and page title, e.g. SITE_NAME=gang-bet for a second instance. */
 const siteName = process.env.SITE_NAME?.trim() || 'Watercooler';
 
+/** Which copy set from src/lib/site-copy.ts to use, e.g. SITE_COPY=neutral. */
+const siteCopy = process.env.SITE_COPY?.trim() || 'watercooler';
+if (!Object.hasOwn(SITE_COPY, siteCopy)) {
+  throw new Error(`SITE_COPY must be one of: ${Object.keys(SITE_COPY).join(', ')} (got "${siteCopy}")`);
+}
+
 export default defineConfig({
   base,
-  // Also replaces %SITE_NAME% in index.html.
-  define: { 'import.meta.env.SITE_NAME': JSON.stringify(siteName) },
+  // import.meta.env.* defines also replace %NAME% in index.html; SITE_TAGLINE is only used there.
+  define: {
+    'import.meta.env.SITE_NAME': JSON.stringify(siteName),
+    'import.meta.env.SITE_COPY': JSON.stringify(siteCopy),
+    'import.meta.env.SITE_TAGLINE': JSON.stringify(SITE_COPY[siteCopy as SiteCopyName].tagline),
+  },
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,

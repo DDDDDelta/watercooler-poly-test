@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useConfig, useMe, useSetMe } from '../lib/auth';
 import { formatPct } from '../lib/format';
+import { COPY, SITE_NAME } from '../lib/site';
 import { setTheme, useTheme } from '../lib/theme';
 import { Avatar } from './Avatar';
 import { Money } from './Money';
@@ -44,8 +45,8 @@ export function Logo({ compact }: { compact?: boolean }) {
         </svg>
       </span>
       <span className={clsx('leading-none', compact && 'hidden sm:block')}>
-        <span className="block text-[17px] font-bold tracking-tight text-fg">{import.meta.env.SITE_NAME}</span>
-        <span className="mt-1 block text-[10px] tracking-[0.25em] text-faint">茶水间预测市场</span>
+        <span className="block text-[17px] font-bold tracking-tight text-fg">{SITE_NAME}</span>
+        <span className="mt-1 block text-[10px] tracking-[0.25em] text-faint">{COPY.tagline}</span>
       </span>
     </Link>
   );
@@ -372,7 +373,7 @@ function Footer() {
         <div className="max-w-sm">
           <Logo />
           <p className="mt-5 text-sm leading-relaxed">
-            茶水间预测市场：用{CURRENCY_NAME}押注同事间的大事小情，价格就是大家的集体预期。
+            {COPY.tagline}：用{CURRENCY_NAME}押注{COPY.footerTopics}，价格就是大家的集体预期。
           </p>
         </div>
         <div className="grid grid-cols-3 gap-10 sm:gap-16">
@@ -393,7 +394,7 @@ function Footer() {
         </div>
       </div>
       <div className="border-t border-line py-5 text-center text-xs text-faint">
-        {import.meta.env.SITE_NAME} · 仅供同事间娱乐，{CURRENCY_NAME}没有任何现实价值
+        {SITE_NAME} · {COPY.disclaimer}，{CURRENCY_NAME}没有任何现实价值
       </div>
     </footer>
   );

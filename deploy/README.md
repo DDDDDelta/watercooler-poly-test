@@ -2,14 +2,14 @@
 
 同一份代码在服务器上跑成多个**互相独立的实例**，每个实例有自己的目录、端口、访问路径和数据库（账号、市场、水滴都不互通）：
 
-| 实例          | 访问地址                        | 服务器目录      | 端口   | 站点名称      |
-| ------------- | ------------------------------- | --------------- | ------ | ------------- |
-| `watercooler` | `https://ky-z.com/watercooler/` | `~/watercooler` | `3000` | `Watercooler` |
-| `gang-bet`    | `https://ky-z.com/gang-bet/`    | `~/gang-bet`    | `3001` | `gang-bet`    |
+| 实例          | 访问地址                        | 服务器目录      | 端口   | 站点名称      | 文案                    |
+| ------------- | ------------------------------- | --------------- | ------ | ------------- | ----------------------- |
+| `watercooler` | `https://ky-z.com/watercooler/` | `~/watercooler` | `3000` | `Watercooler` | `watercooler`（茶水间） |
+| `gang-bet`    | `https://ky-z.com/gang-bet/`    | `~/gang-bet`    | `3001` | `gang-bet`    | `neutral`（中性）       |
 
 实例列表写在 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) 的 `matrix.include` 里。推送到 `main` 分支，或者在 GitHub 的 **Actions → Deploy → Run workflow** 手动触发，每个实例各跑一个部署任务（一个失败不影响另一个）：
 
-1. 在 GitHub 上安装依赖、跑类型检查和测试，用这个实例的 `BASE_PATH`（如 `/gang-bet`）和 `SITE_NAME` 构建前后端
+1. 在 GitHub 上安装依赖、跑类型检查和测试，用这个实例的 `BASE_PATH`（如 `/gang-bet`）、`SITE_NAME` 和 `SITE_COPY` 构建前后端
 2. 通过 SSH 上传到服务器上部署用户家目录下的 `~/<实例>/releases/<时间>-<commit>/`
 3. 在服务器上安装生产依赖（用 nvm 的 Node；`better-sqlite3` 是原生模块，在服务器上安装才能和服务器的 Node 版本匹配）
 4. 把 `~/<实例>/current` 指向新版本，用 `~/<实例>/<实例>.sh restart` 在后台重启
@@ -138,7 +138,7 @@ location /gang-bet/ {
 
 ## 五、再加一个实例
 
-1. 在 `deploy.yml` 的 `matrix.include` 里加一项：`instance`（目录名）、`base_path`、`port`（没被占用的端口）、`site_name`
+1. 在 `deploy.yml` 的 `matrix.include` 里加一项：`instance`（目录名）、`base_path`、`port`（没被占用的端口）、`site_name`、`site_copy`（[`site-copy.ts`](../apps/web/src/lib/site-copy.ts) 里的一套文案，也可以在那里新加一套）
 2. 服务器上：nginx 加一组 `location`（同上），crontab 加一行 `@reboot $HOME/<实例>/<实例>.sh start`
 3. 推送到 `main`，自己先去注册（第一个用户是管理员）
 

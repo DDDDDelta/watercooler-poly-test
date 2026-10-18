@@ -8,6 +8,7 @@ import { Drop } from '../components/Money';
 import { Button, Field, Input } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useConfig, useMe } from '../lib/auth';
+import { COPY } from '../lib/site';
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
   return (
@@ -115,7 +116,7 @@ export function Register() {
 
   return (
     <AuthShell
-      title="加入茶水间"
+      title={COPY.registerTitle}
       subtitle={
         <span className="inline-flex items-center gap-1">
           注册即送 <Drop /> <b className="text-fg">{config?.startingBalance ?? 1000}</b> {CURRENCY_NAME}
