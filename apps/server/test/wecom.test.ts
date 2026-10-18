@@ -173,7 +173,7 @@ describe('WeCom bot', () => {
 
     const group = await fake.message('zhangsan', '@小助手 有什么盘');
     expect(group.reply).toMatch(/\[点这里绑定\]\(https:\/\/example\.com\/watercooler\/bind\/[\w-]{32}\)/);
-    expect(group.reply).toContain('zhangsan');
+    expect(group.reply).not.toContain('zhangsan'); // WeCom userids are encrypted; never shown
     expect(model.requests).toHaveLength(0);
   });
 
@@ -190,8 +190,7 @@ describe('WeCom bot', () => {
 
     const bound = await alice.post('/wecom/bind', { token });
     expect(bound.body).toMatchObject({ wecomUserId: 'zhangsan' });
-    expect(fake.sent).toEqual([{ chatId: 'group1', text: expect.stringContaining('**zhangsan** 已绑定') }]);
-    expect(fake.sent[0]!.text).toContain('ALICE');
+    expect(fake.sent).toEqual([{ chatId: 'group1', text: '✅ ALICE 绑定成功' }]);
     expect((await alice.post('/wecom/bind', { token })).status).toBe(404);
     expect((await alice.get('/me/wecom')).body.binding).toMatchObject({ wecomUserId: 'zhangsan' });
 

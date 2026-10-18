@@ -49,11 +49,7 @@ export default function BindWecom() {
           <>
             <MessagesSquare className="mx-auto size-10 text-brand" />
             <h1 className="mt-4 text-center text-xl font-semibold">绑定企业微信</h1>
-            <dl className="mt-6 space-y-3 rounded bg-fill px-4 py-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-faint">企业微信账号</dt>
-                <dd className="font-mono font-semibold">{request.data.wecomUserId}</dd>
-              </div>
+            <dl className="mt-6 rounded bg-fill px-4 py-3 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-faint">绑定到</dt>
                 <dd className="font-semibold">
@@ -62,13 +58,12 @@ export default function BindWecom() {
               </div>
             </dl>
             <p className="mt-4 text-sm leading-relaxed text-dim">
-              绑定后，这个企业微信账号在群里 @机器人
-              就能用你的账号查盘、下注、开盘、公布结果。只确认你自己的企业微信账号；链接是别人发的就不要确认。
+              绑定后，你在群里 @机器人
+              就能用这个账号查盘、下注、开盘、公布结果。只确认你自己在群里要到的链接；链接是别人发的就不要确认。
             </p>
             {request.data.current && request.data.current.wecomUserId !== request.data.wecomUserId && (
               <p className="mt-3 rounded border border-line px-3 py-2 text-sm text-dim">
-                你现在绑定的是 <span className="font-mono">{request.data.current.wecomUserId}</span>
-                ，确认后会换成上面这个。
+                这个账号已经绑定过另一个企业微信，确认后会换成你现在这个。
               </p>
             )}
             {bind.isError && <p className="mt-3 text-sm text-no">{errorMessage(bind.error)}</p>}

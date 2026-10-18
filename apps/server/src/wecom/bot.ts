@@ -93,7 +93,7 @@ export function startWecom(deps: WecomDeps): WecomService {
       const token = createBindToken(db, msg.userId, msg.chatId, now);
       await msg.reply(
         `你还没有绑定 ${settings.siteName} 账号。[点这里绑定](${siteUrl}/bind/${token})\n` +
-          `这个链接只给企业微信账号 **${msg.userId}** 用，${BIND_TOKEN_TTL / MINUTE} 分钟内有效、只能用一次。打开后登录并确认，再回来 @我 就能查盘、下注、开盘了。`,
+          `这个链接只给你本人用，${BIND_TOKEN_TTL / MINUTE} 分钟内有效、只能用一次。打开后登录并确认，再回来 @我 就能查盘、下注、开盘了。`,
         true,
       );
       return;
@@ -107,7 +107,7 @@ export function startWecom(deps: WecomDeps): WecomService {
       return;
     }
     if (text === '绑定') {
-      await msg.reply(`你已经绑定了「${user.display_name}」（${user.username}）。要换账号先说「解绑」。`, true);
+      await msg.reply(`你已经绑定了「${user.display_name}」。要换账号先说「解绑」。`, true);
       return;
     }
     if (!text) {
@@ -213,11 +213,7 @@ export function startWecom(deps: WecomDeps): WecomService {
     announceBinding(binding, user) {
       if (!binding.chat_id) return;
       transport
-        .send(
-          binding.chat_id,
-          `✅ 企业微信账号 **${binding.wecom_userid}** 已绑定 ${settings.siteName} 账号「${user.display_name}」（${user.username}）。` +
-            `现在可以 @我 查盘、下注、开盘了。如果不是本人操作，对我说「解绑」即可。`,
-        )
+        .send(binding.chat_id, `✅ ${user.display_name} 绑定成功`)
         .catch((err: unknown) => log(`announce failed: ${errorText(err)}`));
     },
     stop() {

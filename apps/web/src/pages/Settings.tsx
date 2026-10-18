@@ -28,8 +28,8 @@ function WecomSection() {
       {binding ? (
         <>
           <p className="text-sm leading-relaxed text-dim">
-            已绑定企业微信账号 <span className="font-mono font-semibold text-fg">{binding.wecomUserId}</span>（
-            {formatDate(binding.createdAt)}）。在群里 @机器人 就能查盘、下注、开盘，结算结果也会发到群里。
+            已绑定企业微信（{formatDate(binding.createdAt)}）。在群里 @机器人
+            就能查盘、下注、开盘，结算结果也会发到群里。
           </p>
           <Button variant="danger" onClick={() => unbind.mutate()} loading={unbind.isPending}>
             解除绑定
