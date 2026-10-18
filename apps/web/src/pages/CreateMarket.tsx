@@ -1,18 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  CATEGORIES,
-  createMarketSchema,
-  MAX_OUTCOMES,
-  RESOLVE_GRACE_DAYS,
-  type MarketSummary,
-} from '@watercooler/shared';
+import { CATEGORIES, createMarketSchema, MAX_OUTCOMES, type MarketSummary } from '@watercooler/shared';
 import clsx from 'clsx';
 import { Gavel, Plus, Sparkles, X } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { MarketCard } from '../components/MarketCard';
-import { Button, Card, Field, Input, Textarea } from '../components/ui';
+import { Button, Card, DateTimeInput, Field, Input, Textarea } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
 import { COPY } from '../lib/site';
@@ -39,17 +33,28 @@ export default function CreateMarket() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>(CATEGORIES[0]);
   const [kind, setKind] = useState<'binary' | 'multi'>('binary');
+  const [mode, setMode] = useState<'pool' | 'polymarket'>('pool');
   const [options, setOptions] = useState<string[]>(['', '', '']);
   const [closeAt, setCloseAt] = useState(() => toLocalInput(Date.now() + 7 * 86_400_000));
+  const [settleAt, setSettleAt] = useState(() => toLocalInput(Date.now() + 8 * 86_400_000));
+  const [submitted, setSubmitted] = useState(false);
 
-  const outcomes = kind === 'binary' ? ['是', '否'] : options.map((o) => o.trim()).filter(Boolean);
+  const outcomes =
+    mode === 'polymarket'
+      ? ['Yes', 'No']
+      : kind === 'binary'
+        ? ['是', '否']
+        : options.map((o) => o.trim()).filter(Boolean);
   const closeTs = new Date(closeAt).getTime();
+  const settleTs = new Date(settleAt).getTime();
 
   const payload = {
+    mode,
     question: question.trim(),
     description: description.trim(),
     category,
     closeAt: closeTs,
+    settleAt: settleTs,
     outcomes,
   };
   const validation = createMarketSchema.safeParse(payload);
@@ -58,6 +63,7 @@ export default function CreateMarket() {
   const preview: MarketSummary = (() => {
     const labels = outcomes.length >= 2 ? outcomes : ['选项 A', '选项 B'];
     return {
+      mode,
       id: 0,
       question: question.trim() || '你的问题会显示在这里？',
       category,
@@ -65,6 +71,7 @@ export default function CreateMarket() {
       isBinary: labels.length === 2,
       pot: 0,
       closeAt: Number.isFinite(closeTs) ? closeTs : Date.now(),
+      settleAt: Number.isFinite(settleTs) ? settleTs : Date.now(),
       createdAt: Date.now(),
       resolvedOutcomeId: null,
       bettorCount: 0,
@@ -93,16 +100,52 @@ export default function CreateMarket() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
+  const publish = () => {
+    setSubmitted(true);
+    if (!validation.success) {
+      toast.error(firstError ?? '请检查预测内容');
+      return;
+    }
+    mutation.mutate();
+  };
+
   return (
     <div className="mx-auto max-w-6xl">
       <h1 className="flex items-center gap-2 section-title">
-        <Sparkles className="size-6 text-brand" /> 发起一个市场
+        <Sparkles className="size-6 text-brand" /> 创建预测
       </h1>
-      <p className="mt-2 text-dim">好问题的标准：答案明确、有截止时间、大家都关心。</p>
+      <p className="mt-2 text-dim">填写预测问题，确认模式和时间后，点击「创建预测」发布。</p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="space-y-6 p-6">
-          <Field label="问题" hint={`${question.trim().length}/200`}>
+          <div>
+            <span className="text-sm font-medium text-dim">交易模式</span>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              {(
+                [
+                  ['pool', '奖池模式', '押中的人按比例瓜分奖池'],
+                  ['polymarket', 'Polymarket', 'Yes / No 份额 · bid / ask 订单簿'],
+                ] as const
+              ).map(([value, title, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setMode(value);
+                    if (value === 'polymarket') setKind('binary');
+                  }}
+                  className={clsx(
+                    'rounded-lg border p-4 text-left',
+                    mode === value ? 'border-brand bg-brand-light' : 'border-line',
+                  )}
+                >
+                  <div className="font-semibold">{title}</div>
+                  <div className="mt-1 text-xs text-faint">{hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <Field label="预测问题（必填）" hint={`至少 5 个字 · ${question.trim().length}/200`}>
             <Input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -133,32 +176,34 @@ export default function CreateMarket() {
             </div>
           </div>
 
-          <div>
-            <span className="text-sm font-medium text-dim">类型</span>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              {(
-                [
-                  ['binary', '是 / 否', '经典二元问题'],
-                  ['multi', '多选一', `2–${MAX_OUTCOMES} 个互斥选项`],
-                ] as const
-              ).map(([value, title, hint]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setKind(value)}
-                  className={clsx(
-                    'rounded-lg border p-4 text-left transition',
-                    kind === value ? 'border-brand bg-brand-light' : 'border-line hover:border-brand',
-                  )}
-                >
-                  <div className="font-semibold">{title}</div>
-                  <div className="mt-0.5 text-xs text-faint">{hint}</div>
-                </button>
-              ))}
+          {mode === 'pool' && (
+            <div>
+              <span className="text-sm font-medium text-dim">类型</span>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                {(
+                  [
+                    ['binary', '是 / 否', '经典二元问题'],
+                    ['multi', '多选一', `2–${MAX_OUTCOMES} 个互斥选项`],
+                  ] as const
+                ).map(([value, title, hint]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setKind(value)}
+                    className={clsx(
+                      'rounded-lg border p-4 text-left transition',
+                      kind === value ? 'border-brand bg-brand-light' : 'border-line hover:border-brand',
+                    )}
+                  >
+                    <div className="font-semibold">{title}</div>
+                    <div className="mt-0.5 text-xs text-faint">{hint}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {kind === 'multi' && (
+          {mode === 'pool' && kind === 'multi' && (
             <div>
               <span className="text-sm font-medium text-dim">选项（只会有一个成真）</span>
               <div className="mt-2 space-y-2">
@@ -191,14 +236,9 @@ export default function CreateMarket() {
             </div>
           )}
 
-          <Field label="下注截止时间" hint={`截止后停止下注，你需要在之后 ${RESOLVE_GRACE_DAYS} 天内公布结果`}>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                type="datetime-local"
-                value={closeAt}
-                onChange={(e) => setCloseAt(e.target.value)}
-                className="sm:max-w-64"
-              />
+          <Field label="停止交易时间" hint="到时停止下注和份额交易，未成交订单自动撤销并解冻">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <DateTimeInput label="停止交易时间" value={closeAt} onChange={setCloseAt} />
               <div className="flex gap-1.5">
                 {QUICK_CLOSE.map((q) => (
                   <button
@@ -209,13 +249,17 @@ export default function CreateMarket() {
                       d.setHours(18, 0, 0, 0);
                       setCloseAt(toLocalInput(d.getTime()));
                     }}
-                    className="rounded-lg border border-line px-2.5 text-xs text-dim transition hover:text-fg"
+                    className="h-10 rounded border border-line px-2.5 text-xs text-dim transition hover:border-brand hover:text-brand"
                   >
                     {q.label}
                   </button>
                 ))}
               </div>
             </div>
+          </Field>
+
+          <Field label="结算时间" hint="到时起可由你公布结果并兑付；未公布则继续等待结算">
+            <DateTimeInput label="结算时间" value={settleAt} min={closeAt} onChange={setSettleAt} />
           </Field>
 
           <Field label="结算规则" hint="写清楚以什么为准、边界情况怎么算，避免扯皮">
@@ -232,23 +276,23 @@ export default function CreateMarket() {
         <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <div className="text-xs font-medium tracking-wider text-faint">预览</div>
           <MarketCard market={preview} preview />
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={!validation.success}
-            loading={mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            发布市场
+          <Button size="lg" className="w-full" loading={mutation.isPending} onClick={publish}>
+            创建预测
           </Button>
+          <p className="text-center text-xs text-faint">填写预测问题后点击创建，创建成功会自动进入预测详情。</p>
           <div className="flex gap-2.5 rounded bg-raised p-3.5 text-xs leading-relaxed text-dim">
             <Gavel className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
-              结果由你来公布，你自己也可以下注。截止后 {RESOLVE_GRACE_DAYS} 天内没有公布，市场会自动取消并全额退款。
+              {mode === 'polymarket'
+                ? '获胜份额每份兑回 1 水滴，取消时 Yes / No 每份兑回 0.50。'
+                : '押中的人按比例瓜分奖池，取消时全额退款。'}
+              结果由你在结算时间到达后公布。未公布时保留持仓和资金，继续等待结算。
             </span>
           </div>
-          {firstError && (question || options.some(Boolean)) && (
-            <p className="text-center text-sm text-no">{firstError}</p>
+          {firstError && (submitted || question || options.some(Boolean)) && (
+            <p role="alert" className="text-center text-sm text-no">
+              {firstError}
+            </p>
           )}
         </div>
       </div>

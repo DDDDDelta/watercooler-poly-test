@@ -5,12 +5,14 @@ import {
   createMarketSchema,
   fromCents,
   resolveMarketSchema,
+  orderSchema,
+  shareAmountSchema,
   type BetResult,
   type MarketDetailResponse,
 } from '@watercooler/shared';
 import { Hono } from 'hono';
 import { requireUser, type AppDeps, type AppEnv } from '../context';
-import { parseBody, parseId } from '../lib/http';
+import { badRequest, parseBody, parseId } from '../lib/http';
 import { cancelMarket, getBet, getUserStakes, listBets, listHolders, placeBet, resolveMarket } from '../services/bets';
 import { addComment, deleteComment, listComments } from '../services/comments';
 import {
@@ -24,6 +26,7 @@ import {
   type MarketSort,
 } from '../services/markets';
 import { getUserById } from '../services/users';
+import { exchangeState, placeOrder, cancelOrder, splitMerge } from '../services/exchange';
 
 const pick = <T extends string>(value: string | undefined, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
@@ -31,10 +34,32 @@ const pick = <T extends string>(value: string | undefined, allowed: readonly T[]
 export function marketRoutes({ db, now }: AppDeps) {
   const app = new Hono<AppEnv>();
 
+  app.get('/markets/:id/exchange', (c) => c.json(exchangeState(db, parseId(c.req.param('id')), c.get('user')?.id)));
+  app.post('/markets/:id/orders', async (c) => {
+    const user = requireUser(c);
+    const input = await parseBody(c, orderSchema);
+    return c.json(placeOrder(db, user.id, parseId(c.req.param('id')), input, now()), 201);
+  });
+  app.post('/markets/:id/orders/:orderId/cancel', (c) => {
+    const user = requireUser(c);
+    cancelOrder(db, user.id, parseId(c.req.param('id')), parseId(c.req.param('orderId')), now());
+    return c.json({ ok: true });
+  });
+  for (const action of ['split', 'merge'] as const) {
+    app.post(`/markets/:id/${action}`, async (c) => {
+      const user = requireUser(c);
+      const input = await parseBody(c, shareAmountSchema);
+      splitMerge(db, user.id, parseId(c.req.param('id')), input.quantity, action, now());
+      return c.json({ ok: true });
+    });
+  }
+
   app.get('/markets', (c) => {
     const q = c.req.query();
+    if (q.mode && q.mode !== 'pool' && q.mode !== 'polymarket') throw badRequest('交易模式无效');
     return c.json(
       listMarkets(db, now(), {
+        mode: q.mode as 'pool' | 'polymarket' | undefined,
         filter: pick<MarketFilter>(q.filter, ['active', 'closed', 'resolved', 'all'], 'active'),
         sort: pick<MarketSort>(q.sort, ['trending', 'pot', 'new', 'closing'], 'trending'),
         category: q.category || undefined,

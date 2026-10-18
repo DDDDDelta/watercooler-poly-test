@@ -40,6 +40,21 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
     if (s) s.staked = fromCents(r.total);
   }
 
+  // Include both owned shares (including those reserved for asks) and cash locked in bids.
+  const exchangeAssets = db
+    .prepare(
+      `SELECT user_id, SUM(value) AS total FROM (
+    SELECT p.user_id, p.quantity * o.mark_price AS value FROM exchange_positions p
+      JOIN outcomes o ON o.id = p.outcome_id JOIN markets m ON m.id = p.market_id WHERE m.status = 'open'
+    UNION ALL SELECT user_id, price * remaining FROM exchange_orders WHERE status = 'open' AND side = 'buy'
+  ) GROUP BY user_id`,
+    )
+    .all() as { user_id: number; total: number }[];
+  for (const r of exchangeAssets) {
+    const s = stats.get(r.user_id);
+    if (s) s.staked += fromCents(r.total);
+  }
+
   const funded = db
     .prepare(`SELECT user_id, SUM(amount) AS total FROM ledger WHERE kind IN ('signup', 'bonus') GROUP BY user_id`)
     .all() as { user_id: number; total: number }[];
@@ -49,7 +64,12 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
   }
 
   const activity = db
-    .prepare('SELECT user_id, COUNT(*) AS bets, COUNT(DISTINCT market_id) AS markets FROM bets GROUP BY user_id')
+    .prepare(
+      `SELECT user_id, COUNT(*) AS bets, COUNT(DISTINCT market_id) AS markets FROM (
+      SELECT user_id, market_id FROM bets
+      UNION ALL SELECT user_id, market_id FROM exchange_orders WHERE remaining < quantity
+    ) GROUP BY user_id`,
+    )
     .all() as { user_id: number; bets: number; markets: number }[];
   for (const a of activity) {
     const s = stats.get(a.user_id);
@@ -200,8 +220,10 @@ export function siteStats(db: DB, now: number): SiteStats {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM markets WHERE status = 'open' AND close_at > ?) AS open_markets,
-         (SELECT COALESCE(SUM(pot), 0) FROM markets)                          AS total_staked,
-         (SELECT COUNT(DISTINCT user_id) FROM bets)                            AS bettors,
+         ((SELECT COALESCE(SUM(pot), 0) FROM markets WHERE mode = 'pool') +
+           (SELECT COALESCE(SUM(price * quantity), 0) FROM exchange_trades)) AS total_staked,
+         (SELECT COUNT(DISTINCT user_id) FROM (SELECT user_id FROM bets UNION ALL
+           SELECT user_id FROM exchange_orders WHERE remaining < quantity)) AS bettors,
          (SELECT COUNT(*) FROM users)                                          AS users`,
     )
     .get(now) as { open_markets: number; total_staked: number; bettors: number; users: number };

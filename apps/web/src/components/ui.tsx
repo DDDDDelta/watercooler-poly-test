@@ -1,7 +1,8 @@
 import clsx from 'clsx';
-import { Loader2, X } from 'lucide-react';
+import { CalendarDays, Loader2, X } from 'lucide-react';
 import {
   useEffect,
+  useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -69,6 +70,44 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
   return <input className={clsx(fieldClass, 'h-10', className)} {...rest} />;
 }
 
+/** Keep the browser's date picker, with a consistent 24-hour display. */
+export function DateTimeInput({
+  label,
+  value,
+  min,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  onChange: (value: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="relative w-full sm:max-w-72">
+      <input
+        ref={input}
+        type="datetime-local"
+        value={value}
+        min={min}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <button
+        type="button"
+        aria-label={`${label}：${value.replace('T', ' ') || '请选择时间'}`}
+        onClick={() => input.current?.showPicker()}
+        className={clsx(fieldClass, 'flex h-10 items-center justify-between gap-3 text-left text-sm tabular-nums')}
+      >
+        <span>{value.replace('T', ' ') || '请选择时间'}</span>
+        <CalendarDays className="size-4 shrink-0 text-faint" />
+      </button>
+    </div>
+  );
+}
+
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={clsx(fieldClass, 'min-h-24 py-2 leading-relaxed', className)} {...rest} />;
 }
@@ -76,7 +115,7 @@ export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLText
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-sm text-fg">{label}</span>
+      <span className="block text-sm text-fg">{label}</span>
       {children}
       {hint && <span className="block text-xs text-faint">{hint}</span>}
     </label>

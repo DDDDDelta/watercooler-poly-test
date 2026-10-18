@@ -2,3 +2,4 @@ node_modules
 dist
 data
 pnpm-lock.yaml
+.local/

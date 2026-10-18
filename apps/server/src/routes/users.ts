@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { requireUser, type AppDeps, type AppEnv } from '../context';
 import { notFound, parseId } from '../lib/http';
 import { listBets } from '../services/bets';
+import { exchangePortfolio, exchangePortfolioOrders } from '../services/exchange';
 import { listMarkets } from '../services/markets';
 import {
   leaderboard,
@@ -31,6 +32,8 @@ export function userRoutes({ db, now }: AppDeps) {
     return c.json<Portfolio>({
       stats: userStatsAndRank(db, user.id).stats,
       bets: userBets(db, user.id, now()),
+      exchangePositions: exchangePortfolio(db, user.id, now()),
+      exchangeOrders: exchangePortfolioOrders(db, user.id),
     });
   });
 

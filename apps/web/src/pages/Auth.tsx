@@ -97,6 +97,7 @@ export function Register() {
   const { me } = useMe();
   const config = useConfig();
   const done = useAfterAuth();
+  const [params] = useSearchParams();
   const [form, setForm] = useState({ username: '', displayName: '', password: '', inviteCode: '' });
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -157,7 +158,7 @@ export function Register() {
       </form>
       <p className="mt-6 text-center text-sm text-dim">
         已有账号？{' '}
-        <Link to="/login" className="text-brand hover:underline">
+        <Link to={`/login${params.toString() ? `?${params}` : ''}`} className="text-brand hover:underline">
           去登录
         </Link>
       </p>

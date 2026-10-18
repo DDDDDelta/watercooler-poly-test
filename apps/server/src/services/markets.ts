@@ -1,13 +1,13 @@
 import {
   fromCents,
   poolShares,
-  RESOLVE_GRACE_DAYS,
   type CreateMarketInput,
   type MarketDetail,
   type MarketStatus,
   type MarketSummary,
   type Outcome,
   type PricePoint,
+  createMarketSchema,
 } from '@watercooler/shared';
 import { placeholders, type DB } from '../db';
 import { badRequest, notFound } from '../lib/http';
@@ -15,6 +15,7 @@ import { DAY, MINUTE } from '../lib/time';
 import { toUserRef } from './users';
 
 export interface MarketRow {
+  mode: 'pool' | 'polymarket';
   id: number;
   question: string;
   description: string;
@@ -22,6 +23,7 @@ export interface MarketRow {
   creator_id: number;
   status: 'open' | 'resolved' | 'cancelled';
   close_at: number;
+  settle_at: number;
   resolved_outcome_id: number | null;
   resolved_at: number | null;
   resolution_note: string | null;
@@ -30,6 +32,8 @@ export interface MarketRow {
 }
 
 export interface OutcomeRow {
+  last_price: number | null;
+  mark_price: number;
   id: number;
   market_id: number;
   idx: number;
@@ -54,9 +58,6 @@ export function isBettable(m: Pick<MarketRow, 'status' | 'close_at'>, now: numbe
   return derivedStatus(m, now) === 'open';
 }
 
-/** Unresolved markets are cancelled automatically at this time. */
-export const resolveDeadline = (m: Pick<MarketRow, 'close_at'>) => m.close_at + RESOLVE_GRACE_DAYS * DAY;
-
 export function getMarketRow(db: DB, id: number): MarketRow {
   const row = db.prepare('SELECT * FROM markets WHERE id = ?').get(id) as MarketRow | undefined;
   if (!row) throw notFound('市场不存在');
@@ -69,10 +70,11 @@ export function getOutcomeRows(db: DB, marketId: number): OutcomeRow[] {
 
 /** Each outcome's share of the pot; resolved markets are pinned to 1 for the winner. */
 export function marketProbabilities(
-  market: Pick<MarketRow, 'status' | 'resolved_outcome_id'>,
+  market: Pick<MarketRow, 'status' | 'resolved_outcome_id'> & Partial<Pick<MarketRow, 'mode'>>,
   outcomes: OutcomeRow[],
 ): number[] {
   if (market.status === 'resolved') return outcomes.map((o) => (o.id === market.resolved_outcome_id ? 1 : 0));
+  if (market.mode === 'polymarket') return outcomes.map((o) => o.mark_price / 100);
   return poolShares(outcomes.map((o) => o.pool));
 }
 
@@ -80,10 +82,12 @@ const LIST_SELECT = `
   SELECT m.*,
          u.username     AS creator_username,
          u.display_name AS creator_display_name,
-         (SELECT COUNT(DISTINCT b.user_id) FROM bets b WHERE b.market_id = m.id) AS bettor_count,
+         CASE WHEN m.mode = 'polymarket' THEN (SELECT COUNT(DISTINCT p.user_id) FROM exchange_positions p WHERE p.market_id = m.id AND p.quantity > 0)
+           ELSE (SELECT COUNT(DISTINCT b.user_id) FROM bets b WHERE b.market_id = m.id) END AS bettor_count,
          (SELECT COUNT(*) FROM comments c WHERE c.market_id = m.id)              AS comment_count,
-         (SELECT COALESCE(SUM(b.amount), 0) FROM bets b
-           WHERE b.market_id = m.id AND b.created_at > @since)                   AS pot_24h
+         CASE WHEN m.mode = 'polymarket' THEN (SELECT COALESCE(SUM(t.price * t.quantity), 0) FROM exchange_trades t WHERE t.market_id = m.id AND t.created_at > @since)
+           ELSE (SELECT COALESCE(SUM(b.amount), 0) FROM bets b
+           WHERE b.market_id = m.id AND b.created_at > @since) END AS pot_24h
     FROM markets m
     JOIN users u ON u.id = m.creator_id`;
 
@@ -118,6 +122,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       change24h: before?.[i] !== undefined && r.status === 'open' ? (probs[i] ?? 0) - before[i]! : null,
     }));
     return {
+      mode: r.mode,
       id: r.id,
       question: r.question,
       category: r.category,
@@ -125,6 +130,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       isBinary: outcomes.length === 2,
       pot: fromCents(r.pot),
       closeAt: r.close_at,
+      settleAt: r.settle_at,
       createdAt: r.created_at,
       resolvedOutcomeId: r.resolved_outcome_id,
       bettorCount: r.bettor_count,
@@ -196,6 +202,7 @@ export type MarketFilter = 'active' | 'closed' | 'resolved' | 'all';
 export type MarketSort = 'trending' | 'pot' | 'new' | 'closing';
 
 export interface ListMarketsOptions {
+  mode?: 'pool' | 'polymarket';
   filter?: MarketFilter;
   sort?: MarketSort;
   category?: string;
@@ -207,6 +214,10 @@ export interface ListMarketsOptions {
 export function listMarkets(db: DB, now: number, opts: ListMarketsOptions = {}): MarketSummary[] {
   const where: string[] = [];
   const params: Record<string, unknown> = { now, since: now - DAY };
+  if (opts.mode) {
+    where.push('m.mode = @mode');
+    params.mode = opts.mode;
+  }
   switch (opts.filter ?? 'active') {
     case 'active':
       where.push(`m.status = 'open' AND m.close_at > @now`);
@@ -260,7 +271,6 @@ export function getMarketDetail(db: DB, id: number, now: number): MarketDetail {
     description: row.description,
     resolvedAt: row.resolved_at,
     resolutionNote: row.resolution_note,
-    resolveBy: resolveDeadline(row),
   };
 }
 
@@ -274,15 +284,27 @@ export function recordPriceSnapshot(db: DB, marketId: number, probs: number[], n
 }
 
 export function createMarket(db: DB, creatorId: number, input: CreateMarketInput, now: number): number {
+  if (!createMarketSchema.safeParse(input).success) throw badRequest('市场配置无效');
   if (input.closeAt <= now + 5 * MINUTE) throw badRequest('截止时间至少要在 5 分钟之后');
   if (input.closeAt > now + 5 * 365 * DAY) throw badRequest('截止时间不能超过 5 年');
+  const settleAt = input.settleAt ?? input.closeAt;
+  if (settleAt > now + 5 * 365 * DAY) throw badRequest('结算时间不能超过 5 年');
   return db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare(
-        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at, mode, settle_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.question, input.description ?? '', input.category, creatorId, input.closeAt, now);
+      .run(
+        input.question,
+        input.description ?? '',
+        input.category,
+        creatorId,
+        input.closeAt,
+        now,
+        input.mode ?? 'pool',
+        settleAt,
+      );
     const marketId = Number(lastInsertRowid);
     const insertOutcome = db.prepare('INSERT INTO outcomes (market_id, idx, label) VALUES (?, ?, ?)');
     input.outcomes.forEach((label, i) => insertOutcome.run(marketId, i, label));

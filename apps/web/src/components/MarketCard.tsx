@@ -36,6 +36,7 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
       </div>
 
       <div className="mt-3 flex flex-1 flex-col justify-end">
+        {market.mode === 'polymarket' && <span className="mb-2 text-xs text-brand">Polymarket · 订单簿</span>}
         {market.isBinary ? (
           <>
             {market.spark.length > 1 ? (
@@ -93,7 +94,7 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
 
       <footer className="mt-4 flex items-center gap-3 border-t border-line pt-3 text-xs text-faint">
         <span className="inline-flex items-center gap-1">
-          奖池 <Money value={market.pot} compact className="text-dim" />
+          {market.mode === 'polymarket' ? '抵押' : '奖池'} <Money value={market.pot} compact className="text-dim" />
         </span>
         <span className="inline-flex items-center gap-1">
           <Users className="size-3.5" />

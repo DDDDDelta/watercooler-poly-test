@@ -41,11 +41,24 @@ export const createMarketSchema = z
     description: z.string().trim().max(5000, '规则说明最多 5000 字').default(''),
     category: z.string().trim().min(1, '请选择分类').max(20),
     closeAt: z.number().int('截止时间无效'),
+    settleAt: z.number().int('结算时间无效').optional(),
+    mode: z.enum(['pool', 'polymarket']).default('pool'),
     outcomes: z
       .array(outcomeLabel)
       .min(MIN_OUTCOMES, `至少 ${MIN_OUTCOMES} 个选项`)
       .max(MAX_OUTCOMES, `最多 ${MAX_OUTCOMES} 个选项`),
   })
+  .refine((v) => v.settleAt === undefined || v.settleAt >= v.closeAt, {
+    message: '结算时间不能早于停止交易时间',
+    path: ['settleAt'],
+  })
+  .refine(
+    (v) => v.mode !== 'polymarket' || (v.outcomes.length === 2 && v.outcomes[0] === 'Yes' && v.outcomes[1] === 'No'),
+    {
+      message: 'Polymarket 模式必须使用 Yes / No 两个选项',
+      path: ['outcomes'],
+    },
+  )
   .refine((v) => new Set(v.outcomes.map((o) => o.toLowerCase())).size === v.outcomes.length, {
     message: '选项不能重复',
     path: ['outcomes'],
@@ -57,6 +70,26 @@ export const betSchema = z.object({
   amount: z.number().min(MIN_BET, `最少下注 ${MIN_BET}`).max(MAX_BET, '金额过大'),
 });
 export type BetInput = z.infer<typeof betSchema>;
+
+// Whole shares and integer-cent prices keep every fill and collateral movement exact.
+export const shareAmountSchema = z.object({ quantity: z.number().int().min(1).max(1_000_000) });
+export const orderSchema = shareAmountSchema.extend({
+  postOnly: z.boolean().optional(),
+  clientOrderId: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9._:-]+$/)
+    .optional(),
+  outcomeId: z.number().int().positive(),
+  side: z.enum(['buy', 'sell']),
+  price: z
+    .number()
+    .min(0.01)
+    .max(0.99)
+    .refine((p) => Math.abs(p * 100 - Math.round(p * 100)) < 1e-8, '价格精确到 0.01'),
+});
+export type OrderInput = z.infer<typeof orderSchema>;
 
 export const resolveMarketSchema = z.object({
   outcomeId: z.number().int(),

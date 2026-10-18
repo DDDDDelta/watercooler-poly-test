@@ -48,7 +48,9 @@ function FeaturedMarket({ market }: { market: MarketSummary }) {
       </Link>
       <div className="mt-4 flex items-end gap-3">
         <span className="font-mono text-4xl font-bold text-brand">{formatPct(lead.probability)}</span>
-        <span className="pb-1 text-sm text-dim">押「{lead.label}」占比</span>
+        <span className="pb-1 text-sm text-dim">
+          {market.mode === 'polymarket' ? `${lead.label} 隐含概率` : `押「${lead.label}」占比`}
+        </span>
         {lead.change24h !== null && Math.abs(lead.change24h) >= 0.005 && (
           <span className={clsx('pb-1 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
             {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 0)}%
@@ -78,16 +80,20 @@ function FeaturedMarket({ market }: { market: MarketSummary }) {
               className="flex flex-1 items-center justify-between gap-3 rounded px-4 py-2.5 text-sm font-semibold transition hover:brightness-95"
               style={{ background: `${c}14`, color: c }}
             >
-              <span className="truncate">押 {o.label}</span>
+              <span className="truncate">
+                {market.mode === 'polymarket' ? '交易' : '押'} {o.label}
+              </span>
               <span className="font-mono text-xs">{formatPct(o.probability)}</span>
             </button>
           );
         })}
       </div>
       <div className="mt-4 flex items-center gap-3 text-xs text-faint">
-        奖池 <Money value={market.pot} compact className="text-dim" />
+        {market.mode === 'polymarket' ? '抵押' : '奖池'} <Money value={market.pot} compact className="text-dim" />
         <span>·</span>
-        <span>{market.bettorCount} 人下注</span>
+        <span>
+          {market.bettorCount} 人{market.mode === 'polymarket' ? '持仓' : '下注'}
+        </span>
         <span className="ml-auto">{formatRelative(market.closeAt)}截止</span>
       </div>
     </Card>
@@ -120,7 +126,8 @@ function Hero() {
             变成<span className="text-brand">概率</span>
           </h1>
           <p className="mt-4 max-w-lg text-base leading-relaxed text-dim">
-            {COPY.heroTopics}……用{CURRENCY_NAME}押注你的判断。所有下注汇成奖池，猜对的人按下注比例瓜分整个奖池。
+            {COPY.heroTopics}……用{CURRENCY_NAME}表达你的判断。选择奖池模式按比例分奖池，或用 Polymarket 模式交易 Yes /
+            No 份额，猜中每份兑回 1 水滴。
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href="#markets" className={buttonClass({ size: 'lg' })}>
@@ -136,7 +143,7 @@ function Hero() {
             <dl className="mt-12 grid max-w-md grid-cols-3 gap-6">
               {[
                 ['活跃市场', String(stats.openMarkets)],
-                ['总奖池', formatCompact(stats.totalStaked)],
+                ['累计参与金额', formatCompact(stats.totalStaked)],
                 ['参与人数', String(stats.bettors)],
               ].map(([label, value]) => (
                 <div key={label}>

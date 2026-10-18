@@ -12,6 +12,9 @@ Polymarket-style play-money prediction market for coworkers. UI copy is Chinese;
 
 - `packages/shared` — pari-mutuel pool math (`pool.ts`), API DTO types, zod request schemas. Imported as TS source by both apps.
 - `apps/server` — Hono API under `/api`; `routes/*` are thin, logic lives in `services/*`. Serves `apps/web/dist` in production.
+- `services/exchange.ts` — optional `polymarket` binary markets: integer-cent limit orders, whole shares, price/time matching (direct transfer and complementary mint/merge), 1 unit collateral per complete set. Buy orders escrow cash; sell orders reserve shares. Cancellation redeems current holdings at 0.50 per share. Keep existing pool mode unchanged. All cash mutations use the ledger and all exchange operations run in SQLite transactions.
+- `/api/trading/*` — programmatic trading routes using the same session auth and exchange services. Preserve user-scoped `clientOrderId` idempotency, cursor pagination, and outcome-relative fill prices. `sdk/python` is the standard-library-only Python client; `pnpm test:python` runs its unit tests and isolated real-HTTP integration test.
+- `postOnly` rejects an incoming order before any fill if ordinary matching finds a counterparty (including complementary mint/merge). Roll back reservations and insertion atomically; resting post-only orders can fill later as makers. Include the flag in client-order idempotency comparisons. Python uses `post_only=True`.
 - `apps/web` — React SPA; pages in `pages/`, data via TanStack Query (`lib/api.ts`). Theme tokens in `src/index.css`: light in `@theme`, 黑夜模式 overrides in `html.dark` (toggled by `lib/theme.ts`).
 
 ## Conventions
@@ -21,7 +24,7 @@ Polymarket-style play-money prediction market for coworkers. UI copy is Chinese;
 - Schema changes: append a new entry to `apps/server/src/db/migrations.ts`; never edit shipped ones.
 - Mutating endpoints are POST with a JSON body (CSRF guard in `app.ts`).
 - Betting is pari-mutuel: winners split the whole pot pro-rata (`splitPot`), nobody backing the winner means full refunds, the house never adds money. Payout previews in the browser must use the same `pool.ts` helpers the server settles with.
-- There are no admins. The market creator resolves or cancels their own market (and may bet in it like anyone); unresolved markets auto-cancel `RESOLVE_GRACE_DAYS` after close (`cancelOverdueMarkets`, run per request). Forgotten passwords: `src/cli.ts reset-password`.
+- There are no admins. The market creator resolves or explicitly cancels their own market (and may bet in it like anyone). `closeAt` stops trading and releases open orders; `settleAt >= closeAt` is the earliest resolution time (defaults to closeAt for older clients). Unresolved markets retain stakes, positions and collateral indefinitely until the creator resolves or cancels; never auto-cancel them on a timer. Forgotten passwords: `src/cli.ts reset-password`.
 - UI follows the 非凸科技 (ft.tech) look: light surfaces, brand blue, 4px buttons, underline tabs. Use theme tokens (`bg-panel`, `text-fg`, `border-line`, `text-brand`, …), never hard-coded colours, so 黑夜模式 keeps working; SVG colours go through `style={{ stroke: 'var(--color-…)' }}` or `useThemeColor()`.
 - `useEffect` callbacks use block bodies and only ever return a cleanup function: `useEffect(() => x(), …)` returns `x()`'s value, which React later calls as the cleanup (this crashed production when a browser's `window.scrollTo` returned a value).
 - The app may be served under a sub-path (`BASE_PATH`, e.g. `/watercooler` in production). Never hard-code root-relative URLs in the web app: use router links/`navigate()` (router has a `basename`) and `import.meta.env.BASE_URL` for anything else.

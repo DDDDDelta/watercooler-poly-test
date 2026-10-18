@@ -264,7 +264,7 @@ function ClosedPanel({ market }: { market: MarketDetail }) {
         <div className="font-medium text-fg">{market.status === 'closed' ? '下注已截止' : '市场已取消'}</div>
         <div className="mt-1 text-xs leading-relaxed text-faint">
           {market.status === 'closed'
-            ? `等待 ${market.creator.displayName} 公布结果。${formatDate(market.resolveBy)} 前还没公布的话，市场自动取消并全额退款。`
+            ? `${formatDate(market.settleAt)} 起可由 ${market.creator.displayName} 公布结果；未公布时保留下注资金，继续等待结算。`
             : `所有下注已全额退回${CURRENCY_NAME}余额。`}
         </div>
       </div>

@@ -15,6 +15,11 @@ const LEDGER_LABEL: Record<LedgerKind, string> = {
   bet: '下注',
   payout: '押中奖金',
   refund: '退款',
+  split: '抵押生成 Yes + No',
+  merge: '合并赎回',
+  order_lock: '买单冻结资金',
+  order_release: '订单解冻 / 价差退回',
+  sell: '卖出份额',
 };
 
 function Ledger() {
@@ -80,7 +85,7 @@ export default function PortfolioPage() {
         <Stat label="可用余额">
           <Money value={stats.balance} />
         </Stat>
-        <Stat label="下注中">
+        <Stat label="下注 / 持仓 / 冻结资金">
           <Money value={stats.staked} />
         </Stat>
         <Stat label="累计盈亏">
@@ -89,6 +94,42 @@ export default function PortfolioPage() {
           </span>
         </Stat>
       </div>
+      {data.exchangeOrders.length > 0 && (
+        <Card className="mt-6 p-5">
+          <h2 className="font-semibold">Polymarket 未成交订单</h2>
+          <ul className="mt-3 divide-y divide-line">
+            {data.exchangeOrders.map((o) => (
+              <li key={o.id} className="py-3 text-sm">
+                <Link to={`/market/${o.marketId}`} className="text-brand">
+                  {o.question}
+                </Link>
+                <p className="mt-1 text-xs text-dim">
+                  {o.side === 'buy' ? '买' : '卖'} {o.outcomeLabel} @ {o.price.toFixed(2)} · 剩余 {o.remaining} 份 ·{' '}
+                  {o.side === 'buy' ? `冻结 ${(o.price * o.remaining).toFixed(2)} 水滴` : `冻结 ${o.remaining} 份`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {data.exchangePositions.length > 0 && (
+        <Card className="mt-6 p-5">
+          <h2 className="font-semibold">Polymarket 份额</h2>
+          <p className="mt-1 text-xs text-faint">持有数量包含卖单冻结份额；已结算份额仅作历史记录，兑付见资金流水。</p>
+          <ul className="mt-3 divide-y divide-line">
+            {data.exchangePositions.map((p) => (
+              <li key={p.outcomeId} className="flex justify-between gap-3 py-3 text-sm">
+                <Link to={`/market/${p.marketId}`} className="min-w-0 truncate text-brand">
+                  {p.question} · {p.outcomeLabel}
+                </Link>
+                <span className="shrink-0 font-mono">
+                  {p.quantity} 份 · {p.status === 'open' || p.status === 'closed' ? `冻结 ${p.reserved}` : '已结算'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card className="mt-6 p-5">
         <Segmented
           variant="tabs"

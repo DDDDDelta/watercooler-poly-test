@@ -173,6 +173,7 @@ describe('betting', () => {
     await dave.post(`/markets/${id}/bets`, { outcomeId: b, amount: 300 });
 
     expect((await bob.post(`/markets/${id}/resolve`, { outcomeId: a })).status).toBe(403);
+    env.clock.now += 2 * DAY;
     const resolved = await alice.post(`/markets/${id}/resolve`, { outcomeId: a, note: 'A 赢了' });
     expect(resolved.status).toBe(200);
     expect(resolved.body.status).toBe('resolved');
@@ -207,6 +208,7 @@ describe('betting', () => {
     const [yes, no] = await outcomeIds(alice, id);
     expect((await alice.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 100 })).status).toBe(200);
     await bob.post(`/markets/${id}/bets`, { outcomeId: no, amount: 100 });
+    env.clock.now += 2 * DAY;
     await alice.post(`/markets/${id}/resolve`, { outcomeId: yes });
     expect(await balance(alice)).toBe(1100);
     expect(await balance(bob)).toBe(900);
@@ -221,6 +223,7 @@ describe('betting', () => {
     const [yes, no] = await outcomeIds(alice, id);
     for (const p of players.slice(0, 3)) await p.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 1 });
     await players[3]!.post(`/markets/${id}/bets`, { outcomeId: no, amount: 7.01 });
+    env.clock.now += 2 * DAY;
     await alice.post(`/markets/${id}/resolve`, { outcomeId: yes });
     // 10.01 split three ways: 3.34 + 3.34 + 3.33
     const won = (await Promise.all(players.slice(0, 3).map(balance))).map((x) => Math.round((x - 999) * 100));
@@ -235,6 +238,7 @@ describe('betting', () => {
     const first = await makeMarket(env, alice);
     const [yes, no] = await outcomeIds(bob, first);
     await bob.post(`/markets/${first}/bets`, { outcomeId: yes, amount: 100 });
+    env.clock.now += 2 * DAY;
     await alice.post(`/markets/${first}/resolve`, { outcomeId: no });
     expect(await balance(bob)).toBe(1000);
     expect((await bob.get('/portfolio')).body.bets[0]).toMatchObject({ state: 'refunded', payout: 100, pnl: 0 });
@@ -251,7 +255,7 @@ describe('betting', () => {
     expectMoneyConserved(env);
   });
 
-  it('stops betting at close and auto-cancels if the creator never resolves', async () => {
+  it('stops betting at close and keeps stakes until the creator resolves', async () => {
     const env = setup();
     const alice = await env.register('alice');
     const bob = await env.register('bob');
@@ -262,16 +266,17 @@ describe('betting', () => {
     env.clock.now += 3 * DAY;
     const closed = (await bob.get(`/markets/${id}`)).body.market;
     expect(closed.status).toBe('closed');
-    expect(closed.resolveBy).toBe(closed.closeAt + 7 * DAY);
+    expect(closed).not.toHaveProperty('resolveBy');
     expect((await bob.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 10 })).status).toBe(409);
     expect(await balance(bob)).toBe(900);
 
-    env.clock.now = closed.resolveBy + 1;
+    env.clock.now = closed.settleAt + 8 * DAY;
     const after = (await bob.get(`/markets/${id}`)).body.market;
-    expect(after.status).toBe('cancelled');
-    expect(after.resolutionNote).toContain('自动取消');
+    expect(after.status).toBe('closed');
+    expect(after.resolvedAt).toBeNull();
+    expect(await balance(bob)).toBe(900);
+    expect((await alice.post(`/markets/${id}/resolve`, { outcomeId: yes })).status).toBe(200);
     expect(await balance(bob)).toBe(1000);
-    expect((await alice.post(`/markets/${id}/resolve`, { outcomeId: yes })).status).toBe(409);
     expectMoneyConserved(env);
   });
 

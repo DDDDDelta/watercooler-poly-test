@@ -7,6 +7,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Avatar } from '../components/Avatar';
 import { BetPanel } from '../components/BetPanel';
+import { ExchangePanel } from '../components/ExchangePanel';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { Money } from '../components/Money';
 import { StatusBadge } from '../components/StatusBadge';
@@ -34,7 +35,9 @@ function ChartCard({ market }: { market: MarketDetail }) {
         {market.isBinary ? (
           <div className="flex items-end gap-3">
             <span className="font-mono text-5xl font-bold text-brand">{formatPct(lead.probability)}</span>
-            <span className="pb-2 text-sm text-dim">押「{lead.label}」占比</span>
+            <span className="pb-2 text-sm text-dim">
+              {market.mode === 'polymarket' ? `${lead.label} 市场隐含概率` : `押「${lead.label}」占比`}
+            </span>
             {lead.change24h !== null && Math.abs(lead.change24h) >= 0.001 && (
               <span className={clsx('pb-2 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
                 {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 1)}% 24h
@@ -65,7 +68,7 @@ function ChartCard({ market }: { market: MarketDetail }) {
         />
       </div>
       <div className="mt-4 h-72">
-        {market.pot === 0 ? (
+        {market.mode === 'pool' && market.pot === 0 ? (
           <Empty icon={<Users className="size-10" />} title="还没有人下注">
             第一笔下注之后，这里会显示大家押注比例的变化
           </Empty>
@@ -175,13 +178,15 @@ function ResolutionBanner({ market }: { market: MarketDetail }) {
           {market.status === 'resolved'
             ? `已公布结果：「${winner?.label}」`
             : market.status === 'cancelled'
-              ? '市场已取消，所有下注已全额退回'
-              : `下注已截止，等待 ${market.creator.displayName} 公布结果`}
+              ? market.mode === 'polymarket'
+                ? '市场已取消，Yes / No 每份已兑回 0.50 水滴'
+                : '市场已取消，所有下注已全额退回'
+              : `交易已停止，等待 ${market.creator.displayName} 在结算时间到达后公布结果`}
         </div>
         {market.resolutionNote && <div className="mt-1 text-fg/70">{market.resolutionNote}</div>}
         <div className="mt-1 text-xs opacity-70">
           {market.status === 'closed'
-            ? `${formatDate(market.resolveBy)} 前没有公布的话，市场自动取消并全额退款`
+            ? `结算时间：${formatDate(market.settleAt)}；未公布时保留持仓和资金，继续等待结算。`
             : market.resolvedAt && formatDate(market.resolvedAt)}
         </div>
       </div>
@@ -396,13 +401,14 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
         ? api.resolve(market.id, outcomeId!, note.trim() || undefined)
         : api.cancel(market.id, note.trim() || undefined),
     onSuccess: () => {
-      toast.success(mode === 'resolve' ? '结果已公布，奖池已发放' : '市场已取消，下注已全额退回');
+      toast.success(mode === 'resolve' ? '结果已公布，资金已结算' : '市场已取消，资金已结算');
       setMode(null);
       void qc.invalidateQueries();
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
   if (market.status === 'resolved' || market.status === 'cancelled') return null;
+  const canResolve = Date.now() >= market.settleAt;
 
   return (
     <Card className="border-brand/30 p-5">
@@ -410,14 +416,21 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
         <Gavel className="size-4" /> 你是创建者
       </h3>
       <p className="mt-1.5 text-xs leading-relaxed text-faint">
-        {market.status === 'closed'
-          ? `下注已截止，请在 ${formatDate(market.resolveBy)} 前公布结果，否则市场自动取消并全额退款。`
-          : `结果确定后就可以公布，公布后立即停止下注；截止后最晚 ${formatDate(market.resolveBy)} 前公布。`}
-        押中的人按比例瓜分全部 {formatMoney(market.pot)} {CURRENCY_NAME}{' '}
-        奖池；题目出了问题可以取消，所有下注全额退回。操作不可撤销。
+        {market.mode === 'polymarket' ? (
+          <>
+            结算时间到达后由你公布结果，获胜份额每份兑回 1 水滴。取消市场时，每份 Yes / No 各兑回 0.50 水滴。
+            停止交易时未成交订单会撤销并解冻；未公布结果时保留持仓和抵押资金，继续等待结算。操作不可撤销。
+          </>
+        ) : (
+          <>
+            结算时间到达后才可公布结果；未公布时保留下注资金，继续等待结算。 押中的人按比例瓜分全部{' '}
+            {formatMoney(market.pot)} {CURRENCY_NAME} 奖池；题目出了问题可以取消，所有下注全额退回。操作不可撤销。
+          </>
+        )}
       </p>
+      {!canResolve && <p className="mt-2 text-xs text-faint">{formatDate(market.settleAt)} 起可公布结果并结算。</p>}
       <div className="mt-4 flex gap-2">
-        <Button size="sm" className="flex-1" onClick={() => setMode('resolve')}>
+        <Button size="sm" className="flex-1" disabled={!canResolve} onClick={() => setMode('resolve')}>
           公布结果
         </Button>
         <Button size="sm" variant="danger" className="flex-1" onClick={() => setMode('cancel')}>
@@ -438,7 +451,9 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
                 )}
               >
                 {o.label}
-                <span className="font-mono text-xs text-faint">奖池 {formatMoney(o.pool)}</span>
+                {market.mode === 'pool' && (
+                  <span className="font-mono text-xs text-faint">奖池 {formatMoney(o.pool)}</span>
+                )}
               </button>
             ))}
           </div>
@@ -452,7 +467,7 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
         <Button
           className="mt-4 w-full"
           variant={mode === 'cancel' ? 'danger' : 'primary'}
-          disabled={mode === 'resolve' && outcomeId === null}
+          disabled={mode === 'resolve' && (outcomeId === null || !canResolve)}
           loading={mutation.isPending}
           onClick={() => mutation.mutate()}
         >
@@ -489,7 +504,7 @@ export default function Market() {
     setOutcomeId(oid);
     setParams((p) => (p.set('outcome', String(oid)), p), { replace: true, preventScrollReset: true });
     if (window.innerWidth < 1024)
-      document.getElementById('trade')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
@@ -503,6 +518,7 @@ export default function Market() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{market.category}</Badge>
+              <Badge>{market.mode === 'polymarket' ? 'Polymarket' : '奖池模式'}</Badge>
               <StatusBadge market={market} />
             </div>
             <h1 className="mt-2 text-2xl leading-tight font-semibold sm:text-[28px] sm:leading-[1.3]">
@@ -510,13 +526,14 @@ export default function Market() {
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-dim">
               <span className="inline-flex items-center gap-1.5">
-                奖池 <Money value={market.pot} />
+                {market.mode === 'polymarket' ? '抵押资金' : '奖池'} <Money value={market.pot} />
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Users className="size-4 text-faint" /> {market.bettorCount} 人下注
+                <Users className="size-4 text-faint" /> {market.bettorCount} 人
+                {market.mode === 'polymarket' ? '持仓' : '下注'}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <CalendarClock className="size-4 text-faint" /> {formatDate(market.closeAt)} 截止
+                <CalendarClock className="size-4 text-faint" /> {formatDate(market.closeAt)} 停止交易
               </span>
               <Link to={`/u/${market.creator.id}`} className="inline-flex items-center gap-1.5 hover:text-fg">
                 <Avatar id={market.creator.id} name={market.creator.displayName} size={18} />
@@ -530,9 +547,15 @@ export default function Market() {
         {!market.isBinary && <OutcomeTable market={market} selected={selected} onSelect={selectOutcome} />}
       </div>
 
-      <aside id="trade" className="space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:self-start">
-        <BetPanel market={market} stakes={stakes} outcomeId={selected} onOutcomeChange={selectOutcome} />
-        <MyStakes market={market} stakes={stakes} />
+      <aside id="trade" className="scroll-mt-20 space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:self-start">
+        {market.mode === 'polymarket' ? (
+          <ExchangePanel key={market.id} market={market} outcomeId={selected} onOutcomeChange={selectOutcome} />
+        ) : (
+          <>
+            <BetPanel market={market} stakes={stakes} outcomeId={selected} onOutcomeChange={selectOutcome} />
+            <MyStakes market={market} stakes={stakes} />
+          </>
+        )}
         {me?.id === market.creator.id && <CreatorPanel market={market} />}
       </aside>
 
@@ -544,48 +567,52 @@ export default function Market() {
           <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-fg">
             {market.description || '发起人没有填写额外说明。以常识和公开信息为准，由发起人公布结果。'}
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-faint sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-faint sm:grid-cols-3">
             <div>
               <div>创建时间</div>
               <div className="mt-0.5 text-dim">{formatDate(market.createdAt)}</div>
             </div>
             <div>
-              <div>下注截止</div>
+              <div>停止交易</div>
               <div className="mt-0.5 text-dim">{formatDate(market.closeAt)}</div>
             </div>
             <div>
-              <div>最晚公布结果</div>
-              <div className="mt-0.5 text-dim">{formatDate(market.resolveBy)}</div>
+              <div>结算时间</div>
+              <div className="mt-0.5 text-dim">{formatDate(market.settleAt)}</div>
             </div>
             <div>
-              <div>选项数</div>
-              <div className="mt-0.5 text-dim">{market.outcomes.length}</div>
+              <div>实际结算</div>
+              <div className="mt-0.5 text-dim">{market.resolvedAt ? formatDate(market.resolvedAt) : '尚未结算'}</div>
             </div>
           </div>
         </Card>
 
         <Card className="p-5">
-          <Segmented
-            variant="tabs"
-            value={tab}
-            onChange={setTab}
-            options={[
-              {
-                value: 'comments',
-                label: (
-                  <span className="inline-flex items-center gap-1.5">
-                    <MessageCircle className="size-3.5" /> 讨论 {market.commentCount > 0 && market.commentCount}
-                  </span>
-                ),
-              },
-              { value: 'holders', label: '下注榜' },
-              { value: 'bets', label: '下注记录' },
-            ]}
-          />
+          {market.mode === 'pool' ? (
+            <Segmented
+              variant="tabs"
+              value={tab}
+              onChange={setTab}
+              options={[
+                {
+                  value: 'comments',
+                  label: (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MessageCircle className="size-3.5" /> 讨论 {market.commentCount > 0 && market.commentCount}
+                    </span>
+                  ),
+                },
+                { value: 'holders', label: '下注榜' },
+                { value: 'bets', label: '下注记录' },
+              ]}
+            />
+          ) : (
+            <h2 className="font-semibold">讨论</h2>
+          )}
           <div className="mt-5">
-            {tab === 'comments' && <Comments marketId={market.id} />}
-            {tab === 'holders' && <Holders market={market} />}
-            {tab === 'bets' && <BetHistory market={market} />}
+            {(market.mode === 'polymarket' || tab === 'comments') && <Comments marketId={market.id} />}
+            {market.mode === 'pool' && tab === 'holders' && <Holders market={market} />}
+            {market.mode === 'pool' && tab === 'bets' && <BetHistory market={market} />}
           </div>
         </Card>
       </div>

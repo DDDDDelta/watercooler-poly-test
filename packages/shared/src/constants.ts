@@ -10,6 +10,3 @@ export const MAX_OUTCOMES = 10;
 /** Smallest and largest single bet, in currency units. */
 export const MIN_BET = 1;
 export const MAX_BET = 1_000_000;
-
-/** The creator must announce the result within this many days after betting closes, or the market is cancelled. */
-export const RESOLVE_GRACE_DAYS = 7;

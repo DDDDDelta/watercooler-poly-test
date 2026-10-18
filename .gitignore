@@ -11,3 +11,7 @@ data/
 .DS_Store
 coverage/
 .vite/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
