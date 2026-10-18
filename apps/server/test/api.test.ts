@@ -255,7 +255,7 @@ describe('betting', () => {
     expectMoneyConserved(env);
   });
 
-  it('stops betting at close and keeps stakes until the creator resolves', async () => {
+  it('stops betting at close and refunds overdue pool markets exactly once', async () => {
     const env = setup();
     const alice = await env.register('alice');
     const bob = await env.register('bob');
@@ -266,16 +266,15 @@ describe('betting', () => {
     env.clock.now += 3 * DAY;
     const closed = (await bob.get(`/markets/${id}`)).body.market;
     expect(closed.status).toBe('closed');
-    expect(closed).not.toHaveProperty('resolveBy');
+    expect(closed.resolveBy).toBe(closed.settleAt + 7 * DAY);
     expect((await bob.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 10 })).status).toBe(409);
     expect(await balance(bob)).toBe(900);
 
     env.clock.now = closed.settleAt + 8 * DAY;
     const after = (await bob.get(`/markets/${id}`)).body.market;
-    expect(after.status).toBe('closed');
-    expect(after.resolvedAt).toBeNull();
-    expect(await balance(bob)).toBe(900);
-    expect((await alice.post(`/markets/${id}/resolve`, { outcomeId: yes })).status).toBe(200);
+    expect(after.status).toBe('cancelled');
+    expect(after.resolvedAt).toBe(closed.resolveBy);
+    expect((await alice.post(`/markets/${id}/resolve`, { outcomeId: yes })).status).toBe(409);
     expect(await balance(bob)).toBe(1000);
     expectMoneyConserved(env);
   });

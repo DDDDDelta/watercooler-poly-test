@@ -93,6 +93,9 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
       </div>
 
       <footer className="mt-4 flex items-center gap-3 border-t border-line pt-3 text-xs text-faint">
+        {market.isAi && (
+          <span className="rounded bg-brand-light px-1.5 py-0.5 text-[10px] font-semibold text-brand">AI</span>
+        )}
         <span className="inline-flex items-center gap-1">
           {market.mode === 'polymarket' ? '抵押' : '奖池'} <Money value={market.pot} compact className="text-dim" />
         </span>

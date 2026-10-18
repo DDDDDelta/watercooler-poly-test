@@ -24,6 +24,7 @@ import {
   type HistoryRange,
   type MarketFilter,
   type MarketSort,
+  type MarketZone,
 } from '../services/markets';
 import { getUserById } from '../services/users';
 import { exchangeState, placeOrder, cancelOrder, splitMerge } from '../services/exchange';
@@ -61,6 +62,7 @@ export function marketRoutes({ db, now }: AppDeps) {
       listMarkets(db, now(), {
         mode: q.mode as 'pool' | 'polymarket' | undefined,
         filter: pick<MarketFilter>(q.filter, ['active', 'closed', 'resolved', 'all'], 'active'),
+        zone: pick<MarketZone>(q.zone, ['human', 'ai', 'any'], 'human'),
         sort: pick<MarketSort>(q.sort, ['trending', 'pot', 'new', 'closing'], 'trending'),
         category: q.category || undefined,
         search: q.q?.trim() || undefined,

@@ -10,6 +10,7 @@ export interface UserRow {
   username: string;
   display_name: string;
   password_hash: string;
+  is_bot: 0 | 1;
   balance: number;
   last_bonus_date: string | null;
   created_at: number;
@@ -24,6 +25,7 @@ export const toUserRef = (u: Pick<UserRow, 'id' | 'username' | 'display_name'>):
 export const toPublicUser = (u: UserRow): PublicUser => ({
   ...toUserRef(u),
   createdAt: u.created_at,
+  isBot: u.is_bot === 1,
 });
 
 export function toMe(u: UserRow, config: Config, now: number): Me {
@@ -41,6 +43,9 @@ export function getUserById(db: DB, id: number): UserRow | undefined {
 export function getUserByUsername(db: DB, username: string): UserRow | undefined {
   return db.prepare('SELECT * FROM users WHERE username = ?').get(username) as UserRow | undefined;
 }
+
+/** Usernames with this prefix are reserved for AI bots. */
+export const BOT_USERNAME_PREFIX = 'ai_bot_';
 
 export interface LedgerOptions {
   marketId?: number | null;
@@ -77,15 +82,17 @@ export async function createUser(
   config: Config,
   input: { username: string; displayName: string; password: string },
   now: number,
+  opts: { bot?: boolean } = {},
 ): Promise<UserRow> {
   if (getUserByUsername(db, input.username)) throw conflict('用户名已被占用');
+  if (!opts.bot && input.username.toLowerCase().startsWith(BOT_USERNAME_PREFIX)) throw conflict('用户名已被占用');
   const passwordHash = await hashPassword(input.password);
   return db.transaction(() => {
     // Re-check inside the transaction: hashing is async, another request may have won the race.
     if (getUserByUsername(db, input.username)) throw conflict('用户名已被占用');
     const { lastInsertRowid } = db
-      .prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)')
-      .run(input.username, input.displayName, passwordHash, now);
+      .prepare('INSERT INTO users (username, display_name, password_hash, is_bot, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(input.username, input.displayName, passwordHash, opts.bot ? 1 : 0, now);
     const id = Number(lastInsertRowid);
     const starting = Math.round(config.startingBalance * 100);
     if (starting > 0) adjustBalance(db, id, starting, 'signup', now, { note: '注册奖励' });

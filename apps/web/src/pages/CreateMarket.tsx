@@ -69,6 +69,7 @@ export default function CreateMarket() {
       category,
       status: 'open',
       isBinary: labels.length === 2,
+      isAi: false,
       pot: 0,
       closeAt: Number.isFinite(closeTs) ? closeTs : Date.now(),
       settleAt: Number.isFinite(settleTs) ? settleTs : Date.now(),
@@ -258,7 +259,14 @@ export default function CreateMarket() {
             </div>
           </Field>
 
-          <Field label="结算时间" hint="到时起可由你公布结果并兑付；未公布则继续等待结算">
+          <Field
+            label="结算时间"
+            hint={
+              mode === 'polymarket'
+                ? '到时起可公布结果并兑付；未公布则继续等待，不会自动取消'
+                : '到时起可公布结果并兑付；7 天未公布会自动取消退款'
+            }
+          >
             <DateTimeInput label="结算时间" value={settleAt} min={closeAt} onChange={setSettleAt} />
           </Field>
 
@@ -286,7 +294,10 @@ export default function CreateMarket() {
               {mode === 'polymarket'
                 ? '获胜份额每份兑回 1 水滴，取消时 Yes / No 每份兑回 0.50。'
                 : '押中的人按比例瓜分奖池，取消时全额退款。'}
-              结果由你在结算时间到达后公布。未公布时保留持仓和资金，继续等待结算。
+              结果由你在结算时间到达后公布。
+              {mode === 'polymarket'
+                ? '未公布时保留持仓和资金，继续等待结算，不会自动取消。'
+                : '结算时间后 7 天未公布，自动取消并全额退款。'}
             </span>
           </div>
           {firstError && (submitted || question || options.some(Boolean)) && (

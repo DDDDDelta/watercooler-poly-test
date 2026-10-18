@@ -3,12 +3,17 @@ import type { Config } from './config';
 import type { DB } from './db';
 import { unauthorized } from './lib/http';
 import type { UserRow } from './services/users';
+import type { WecomService } from './wecom/bot';
 
 export interface AppDeps {
   db: DB;
   config: Config;
   /** Injectable clock, for tests and seeding. */
   now: () => number;
+  /** Whether AI bots are running (a valid bot.json was found). */
+  botsEnabled?: boolean;
+  /** The WeCom bot, when bot.json configures one. */
+  wecom?: Pick<WecomService, 'announceBinding'>;
 }
 
 export interface AppEnv {

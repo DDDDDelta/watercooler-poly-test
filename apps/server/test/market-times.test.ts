@@ -4,7 +4,7 @@ import { setup } from './helpers';
 const DAY = 86400000;
 
 it.each(['pool', 'polymarket'] as const)(
-  'separates close and settlement, preserving unresolved assets indefinitely in %s mode',
+  'separates close and settlement and applies the %s timeout policy',
   async (mode) => {
     const e = setup();
     try {
@@ -29,7 +29,8 @@ it.each(['pool', 'polymarket'] as const)(
       const path = `/markets/${id}`;
       const market = (await trader.get(path)).body.market;
       expect(market).toMatchObject({ closeAt, settleAt, status: 'open' });
-      expect(market).not.toHaveProperty('resolveBy');
+      if (mode === 'polymarket') expect(market).not.toHaveProperty('resolveBy');
+      else expect(market.resolveBy).toBe(settleAt + 7 * DAY);
       expect((await trader.get('/markets')).body[0].settleAt).toBe(settleAt);
       const yes = market.outcomes[0].id;
       const delayedYes = (await trader.get(`/markets/${delayed}`)).body.market.outcomes[0].id;
@@ -77,6 +78,16 @@ it.each(['pool', 'polymarket'] as const)(
       e.clock.now = settleAt + 7 * DAY - 1;
       expect((await trader.get(`/markets/${delayed}`)).body.market.status).toBe('closed');
       e.clock.now++;
+      if (mode === 'pool') {
+        const refunded = (await trader.get(`/markets/${delayed}`)).body.market;
+        expect(refunded).toMatchObject({ status: 'cancelled', resolvedAt: settleAt + 7 * DAY });
+        expect((await trader.get('/auth/me')).body.user.balance).toBe(1000);
+        const afterRefund = ledgerCount();
+        await trader.get(`/markets/${delayed}`);
+        expect(ledgerCount()).toBe(afterRefund);
+        expect((await creator.post(`/markets/${delayed}/resolve`, { outcomeId: delayedYes })).status).toBe(409);
+        return;
+      }
       expect((await trader.get(`/markets/${delayed}`)).body.market.status).toBe('closed');
       const beforeWaiting = ledgerCount();
       e.clock.now = settleAt + 365 * DAY;

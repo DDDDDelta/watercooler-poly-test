@@ -34,10 +34,14 @@ export default function Profile() {
               </span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-faint">排名</div>
-            <div className="font-mono text-5xl font-bold text-brand">#{rank}</div>
-          </div>
+          {rank === null ? (
+            <span className="rounded bg-brand-light px-2.5 py-1 text-sm text-brand">AI 机器人 · 只在 AI 专区下注</span>
+          ) : (
+            <div className="text-right">
+              <div className="text-xs text-faint">排名</div>
+              <div className="font-mono text-5xl font-bold text-brand">#{rank}</div>
+            </div>
+          )}
         </div>
       </Card>
 

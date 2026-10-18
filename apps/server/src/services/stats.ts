@@ -1,6 +1,7 @@
 import {
   fromCents,
   round2,
+  type AiZoneSummary,
   type LeaderboardEntry,
   type LedgerEntry,
   type LedgerKind,
@@ -88,9 +89,10 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
 
 export type LeaderboardSort = 'profit' | 'netWorth' | 'bets';
 
-export function leaderboard(db: DB, sort: LeaderboardSort = 'profit'): LeaderboardEntry[] {
+/** People only by default; `bots` ranks the AI bots instead. */
+export function leaderboard(db: DB, sort: LeaderboardSort = 'profit', bots = false): LeaderboardEntry[] {
   const stats = computeAllStats(db);
-  const users = db.prepare('SELECT id, username, display_name FROM users').all() as {
+  const users = db.prepare('SELECT id, username, display_name FROM users WHERE is_bot = ?').all(bots ? 1 : 0) as {
     id: number;
     username: string;
     display_name: string;
@@ -102,11 +104,13 @@ export function leaderboard(db: DB, sort: LeaderboardSort = 'profit'): Leaderboa
     .map((e, i) => ({ rank: i + 1, ...e }));
 }
 
-export function userStatsAndRank(db: DB, userId: number): { stats: UserStats; rank: number } {
-  const board = leaderboard(db, 'profit');
-  const entry = board.find((e) => e.user.id === userId);
-  if (!entry) throw new Error(`unknown user ${userId}`);
-  return { stats: entry.stats, rank: entry.rank };
+/** A person's stats and leaderboard position; bots get their stats but no rank. */
+export function userStatsAndRank(db: DB, userId: number): { stats: UserStats; rank: number | null } {
+  const entry = leaderboard(db, 'profit').find((e) => e.user.id === userId);
+  if (entry) return { stats: entry.stats, rank: entry.rank };
+  const stats = computeAllStats(db).get(userId);
+  if (!stats) throw new Error(`unknown user ${userId}`);
+  return { stats, rank: null };
 }
 
 /** All of a user's stakes, one row per outcome backed, live markets first. */
@@ -219,12 +223,15 @@ export function siteStats(db: DB, now: number): SiteStats {
   const row = db
     .prepare(
       `SELECT
-         (SELECT COUNT(*) FROM markets WHERE status = 'open' AND close_at > ?) AS open_markets,
-         ((SELECT COALESCE(SUM(pot), 0) FROM markets WHERE mode = 'pool') +
-           (SELECT COALESCE(SUM(price * quantity), 0) FROM exchange_trades)) AS total_staked,
-         (SELECT COUNT(DISTINCT user_id) FROM (SELECT user_id FROM bets UNION ALL
-           SELECT user_id FROM exchange_orders WHERE remaining < quantity)) AS bettors,
-         (SELECT COUNT(*) FROM users)                                          AS users`,
+         (SELECT COUNT(*) FROM markets WHERE is_ai = 0 AND status = 'open' AND close_at > ?) AS open_markets,
+         ((SELECT COALESCE(SUM(pot), 0) FROM markets WHERE mode = 'pool' AND is_ai = 0) +
+           (SELECT COALESCE(SUM(t.price * t.quantity), 0) FROM exchange_trades t
+             JOIN markets m ON m.id = t.market_id WHERE m.is_ai = 0)) AS total_staked,
+         (SELECT COUNT(DISTINCT user_id) FROM (
+           SELECT b.user_id FROM bets b JOIN markets m ON m.id = b.market_id WHERE m.is_ai = 0
+           UNION ALL SELECT o.user_id FROM exchange_orders o JOIN markets m ON m.id = o.market_id
+             WHERE m.is_ai = 0 AND o.remaining < o.quantity)) AS bettors,
+         (SELECT COUNT(*) FROM users WHERE is_bot = 0) AS users`,
     )
     .get(now) as { open_markets: number; total_staked: number; bettors: number; users: number };
   return {
@@ -232,5 +239,27 @@ export function siteStats(db: DB, now: number): SiteStats {
     totalStaked: fromCents(row.total_staked),
     bettors: row.bettors,
     users: row.users,
+  };
+}
+
+export function aiZoneSummary(db: DB, now: number): AiZoneSummary {
+  const row = db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM users WHERE is_bot = 1)                                        AS bots,
+         (SELECT COUNT(*) FROM markets WHERE is_ai = 1 AND status = 'open' AND close_at > ?) AS open_markets,
+         (SELECT COALESCE(SUM(pot), 0) FROM markets WHERE is_ai = 1)                          AS pot,
+         (SELECT COALESCE(SUM(l.amount), 0) FROM ledger l
+            JOIN users u ON u.id = l.user_id
+            JOIN markets m ON m.id = l.market_id
+           WHERE u.is_bot = 0 AND m.is_ai = 1 AND m.status <> 'open')                         AS human_profit`,
+    )
+    .get(now) as { bots: number; open_markets: number; pot: number; human_profit: number };
+  return {
+    bots: row.bots,
+    openMarkets: row.open_markets,
+    pot: fromCents(row.pot),
+    humanProfit: fromCents(row.human_profit),
+    richestBots: leaderboard(db, 'netWorth', true).slice(0, 10),
   };
 }

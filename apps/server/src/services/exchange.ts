@@ -29,10 +29,14 @@ export interface OrderRow {
   created_at: number;
 }
 
-function exchangeMarket(db: DB, marketId: number, now?: number) {
+function exchangeMarket(db: DB, marketId: number, now?: number, userId?: number) {
   const m = getMarketRow(db, marketId);
   if (m.mode !== 'polymarket') throw badRequest('此市场不是 Polymarket 模式');
   if (now !== undefined && !isBettable(m, now)) throw conflict('交易已截止');
+  if (userId !== undefined && !m.is_ai) {
+    const user = db.prepare('SELECT is_bot FROM users WHERE id = ?').get(userId) as { is_bot: number } | undefined;
+    if (user?.is_bot) throw forbidden('机器人只能在 AI 专区交易');
+  }
   return m;
 }
 
@@ -66,7 +70,7 @@ export function splitMerge(
 ) {
   if (!shareAmountSchema.safeParse({ quantity }).success) throw badRequest('份额必须为 1–1000000 的整数');
   db.transaction(() => {
-    exchangeMarket(db, marketId, now);
+    exchangeMarket(db, marketId, now, userId);
     const outcomes = getOutcomeRows(db, marketId);
     if (action === 'merge' && outcomes.some((o) => available(db, userId, o.id) < quantity))
       throw badRequest('可用 Yes / No 份额不足');
@@ -172,7 +176,7 @@ export function placeOrder(db: DB, userId: number, marketId: number, input: Orde
         return toOrder(existing);
       }
     }
-    exchangeMarket(db, marketId, now);
+    exchangeMarket(db, marketId, now, userId);
     if (!getOutcomeRows(db, marketId).some((o) => o.id === input.outcomeId)) throw notFound('选项不存在');
     const price = Math.round(input.price * 100);
     if (input.side === 'buy') {

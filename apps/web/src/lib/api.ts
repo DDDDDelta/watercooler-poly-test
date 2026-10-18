@@ -1,4 +1,5 @@
 import type {
+  AiZoneSummary,
   AppConfig,
   Bet,
   BetInput,
@@ -19,6 +20,8 @@ import type {
   ExchangeState,
   ExchangeOrder,
   OrderInput,
+  WecomBinding,
+  WecomBindRequest,
 } from '@watercooler/shared';
 
 export class ApiError extends Error {
@@ -68,11 +71,17 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) => post('/auth/password', { oldPassword, newPassword }),
   updateProfile: (displayName: string) => post<{ user: Me }>('/me/profile', { displayName }),
   claimBonus: () => post<{ balance: number; amount: number }>('/me/bonus'),
+  wecomBinding: () => get<{ binding: WecomBinding | null }>('/me/wecom'),
+  wecomBindRequest: (token: string) => get<WecomBindRequest>(`/wecom/bind/${encodeURIComponent(token)}`),
+  wecomBind: (token: string) => post<WecomBinding>('/wecom/bind', { token }),
+  wecomUnbind: () => post<{ ok: true }>('/me/wecom/unbind'),
 
   stats: () => get<SiteStats>('/stats'),
-  activity: (limit = 30) => get<Bet[]>(`/activity${qs({ limit })}`),
-  markets: (p: { filter?: MarketFilter; sort?: MarketSort; category?: string; q?: string; limit?: number } = {}) =>
-    get<MarketSummary[]>(`/markets${qs(p)}`),
+  activity: (limit = 30, zone?: 'ai') => get<Bet[]>(`/activity${qs({ limit, zone })}`),
+  markets: (
+    p: { filter?: MarketFilter; sort?: MarketSort; category?: string; q?: string; limit?: number; zone?: 'ai' } = {},
+  ) => get<MarketSummary[]>(`/markets${qs(p)}`),
+  aiZone: () => get<AiZoneSummary>('/ai'),
   market: (id: number) => get<MarketDetailResponse>(`/markets/${id}`),
   exchange: (id: number) => get<ExchangeState>(`/markets/${id}/exchange`),
   order: (id: number, input: OrderInput) => post<ExchangeOrder>(`/markets/${id}/orders`, input),

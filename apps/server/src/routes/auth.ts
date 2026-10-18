@@ -13,9 +13,10 @@ import { hashPassword, verifyPassword } from '../lib/password';
 import { RateLimiter } from '../lib/rateLimit';
 import { endSession, revokeSessions, startSession } from '../lib/session';
 import { MINUTE } from '../lib/time';
+import { aiMarketsExist } from '../services/markets';
 import { claimDailyBonus, createUser, getUserById, getUserByUsername, toMe } from '../services/users';
 
-export function authRoutes({ db, config, now }: AppDeps) {
+export function authRoutes({ db, config, now, botsEnabled, wecom }: AppDeps) {
   const app = new Hono<AppEnv>();
   const loginFailures = new RateLimiter(10, 15 * MINUTE);
   const registrations = new RateLimiter(20, 60 * MINUTE);
@@ -27,6 +28,8 @@ export function authRoutes({ db, config, now }: AppDeps) {
       startingBalance: config.startingBalance,
       dailyBonus: config.dailyBonus,
       privateMode: config.privateMode,
+      aiZone: botsEnabled || aiMarketsExist(db),
+      wecom: wecom !== undefined,
     }),
   );
 
@@ -54,7 +57,7 @@ export function authRoutes({ db, config, now }: AppDeps) {
     const user = getUserByUsername(db, input.username);
     // Always run a hash comparison so response time does not reveal whether the user exists.
     const ok = await verifyPassword(input.password, user?.password_hash ?? 'scrypt$16384$8$1$AAAA$AAAA');
-    if (!user || !ok) {
+    if (!user || !ok || user.is_bot) {
       loginFailures.hit(key);
       throw unauthorized('用户名或密码错误');
     }

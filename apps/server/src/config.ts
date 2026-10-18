@@ -27,6 +27,8 @@ export interface Config {
    * or "" at the site root. The proxy strips it before forwarding; we only need it to scope cookies.
    */
   basePath: string;
+  /** bot.json with the AI bots' model settings; bots stay off when the file is missing. */
+  botConfigPath: string;
 }
 
 /** Load `.env` from the repo root or the current directory if present. */
@@ -71,5 +73,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     timezone: env.APP_TIMEZONE || 'Asia/Shanghai',
     staticDir,
     basePath: normalizeBasePath(env.BASE_PATH),
+    botConfigPath: env.BOT_CONFIG ? resolve(env.BOT_CONFIG) : resolve(REPO_ROOT, 'bot.json'),
   };
 }

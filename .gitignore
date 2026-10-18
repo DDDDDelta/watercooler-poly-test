@@ -5,6 +5,7 @@ data/
 *.db-shm
 *.db-wal
 .env
+bot.json
 .env.*
 !.env.example
 *.log

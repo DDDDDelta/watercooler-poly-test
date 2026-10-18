@@ -191,7 +191,60 @@ export const migrations: string[] = [
     SELECT id, 'signup', 100000, 100000, '玩法升级为奖池模式，余额重置', CAST(unixepoch('subsec') * 1000 AS INTEGER)
       FROM users;
   `,
-  /* 3: optional fully collateralized binary order books. Existing pool data is preserved. */ `
+  /* 3: AI bots and the AI zone. Bots are ordinary accounts flagged is_bot; markets they create are
+        is_ai and only those can take bot bets. ai_checked_at throttles the creator bot's attempts to
+        look up the result; bot_attempts counts paid question-writing calls, failed ones included,
+        against the daily cap. */ `
+  ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE markets ADD COLUMN is_ai INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE markets ADD COLUMN ai_checked_at INTEGER;
+  CREATE INDEX markets_ai ON markets(is_ai, status, close_at);
+
+  CREATE TABLE bot_attempts (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX bot_attempts_kind ON bot_attempts(kind, created_at);
+  `,
+  /* 4: WeCom (企业微信) bot. A binding ties one WeCom account to one site account; chat_id is the
+        group where they last talked to the bot, which is where notices go. Bind tokens are stored
+        hashed and single-use. Actions are money moves waiting for the owner to tap the confirmation
+        card. Notices record which settlement messages and reminders were already sent. */ `
+  CREATE TABLE wecom_bindings (
+    wecom_userid TEXT    PRIMARY KEY,
+    user_id      INTEGER NOT NULL UNIQUE REFERENCES users(id),
+    chat_id      TEXT,
+    created_at   INTEGER NOT NULL
+  );
+
+  CREATE TABLE wecom_bind_tokens (
+    token_hash   TEXT    PRIMARY KEY,
+    wecom_userid TEXT    NOT NULL,
+    chat_id      TEXT    NOT NULL,
+    expires_at   INTEGER NOT NULL
+  );
+  CREATE INDEX wecom_bind_tokens_user ON wecom_bind_tokens(wecom_userid);
+
+  CREATE TABLE wecom_actions (
+    id           INTEGER PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    wecom_userid TEXT    NOT NULL,
+    kind         TEXT    NOT NULL CHECK (kind IN ('bet', 'create', 'resolve', 'cancel')),
+    payload      TEXT    NOT NULL,
+    task_id      TEXT    NOT NULL UNIQUE,
+    status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed', 'cancelled')),
+    created_at   INTEGER NOT NULL
+  );
+
+  CREATE TABLE wecom_notices (
+    kind       TEXT    NOT NULL,
+    market_id  INTEGER NOT NULL REFERENCES markets(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, market_id)
+  );
+  `,
+  /* 5: optional fully collateralized binary order books. Existing pool data is preserved. */ `
   ALTER TABLE markets ADD COLUMN mode TEXT NOT NULL DEFAULT 'pool' CHECK (mode IN ('pool', 'polymarket'));
   ALTER TABLE outcomes ADD COLUMN last_price INTEGER CHECK (last_price BETWEEN 1 AND 99);
   ALTER TABLE outcomes ADD COLUMN mark_price REAL NOT NULL DEFAULT 50;
@@ -244,15 +297,15 @@ export const migrations: string[] = [
   DROP TABLE old_ledger;
   CREATE INDEX ledger_user ON ledger(user_id, id);
   `,
-  /* 4: user-scoped idempotent order submission for trading clients. */ `
+  /* 6: user-scoped idempotent order submission for trading clients. */ `
   ALTER TABLE exchange_orders ADD COLUMN client_order_id TEXT;
   CREATE UNIQUE INDEX exchange_orders_client_id ON exchange_orders(user_id, client_order_id)
     WHERE client_order_id IS NOT NULL;
   `,
-  /* 5: maker-only limit orders; existing orders keep their original behavior. */ `
+  /* 7: maker-only limit orders; existing orders keep their original behavior. */ `
   ALTER TABLE exchange_orders ADD COLUMN post_only INTEGER NOT NULL DEFAULT 0 CHECK (post_only IN (0, 1));
   `,
-  /* 6: separate trading close from the earliest resolution time. */ `
+  /* 8: separate trading close from the earliest resolution time. */ `
   ALTER TABLE markets ADD COLUMN settle_at INTEGER NOT NULL DEFAULT 0;
   UPDATE markets SET settle_at = close_at;
   CREATE INDEX markets_settlement ON markets(status, settle_at);

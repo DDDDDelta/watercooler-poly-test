@@ -10,3 +10,6 @@ export const MAX_OUTCOMES = 10;
 /** Smallest and largest single bet, in currency units. */
 export const MIN_BET = 1;
 export const MAX_BET = 1_000_000;
+
+/** Pool markets refund after this many days without a result, measured from settleAt. */
+export const RESOLVE_GRACE_DAYS = 7;

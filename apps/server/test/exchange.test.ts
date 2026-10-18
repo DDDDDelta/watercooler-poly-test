@@ -76,6 +76,22 @@ describe('Polymarket exchange', () => {
     expect((await e.alice.post(`${e.base}/split`, { quantity: 1001 })).status).toBe(400);
   });
 
+  it('keeps AI bots out of human order books and collateral operations', async () => {
+    const e = await fixture();
+    e.db.prepare('UPDATE users SET is_bot = 1 WHERE id = 1').run();
+    expect(() => splitMerge(e.db, 1, e.id, 2, 'split', e.clock.now)).toThrow('机器人只能在 AI 专区交易');
+    expect(() =>
+      placeOrder(e.db, 1, e.id, { outcomeId: e.yes, side: 'buy', price: 0.4, quantity: 1 }, e.clock.now),
+    ).toThrow('机器人只能在 AI 专区交易');
+    expect(e.db.prepare('SELECT COUNT(*) AS n FROM exchange_orders').get()).toEqual({ n: 0 });
+    expect(e.db.prepare('SELECT balance FROM users WHERE id = 1').get()).toEqual({ balance: 100000 });
+    e.db.prepare('UPDATE markets SET is_ai = 1 WHERE id = ?').run(e.id);
+    splitMerge(e.db, 1, e.id, 2, 'split', e.clock.now);
+    expect(
+      placeOrder(e.db, 1, e.id, { outcomeId: e.yes, side: 'sell', price: 0.6, quantity: 1 }, e.clock.now).status,
+    ).toBe('open');
+  });
+
   it('matches best prices then FIFO, partially fills and refunds limit price improvement', async () => {
     const e = await fixture();
     await e.bob.post(`${e.base}/split`, { quantity: 10 });

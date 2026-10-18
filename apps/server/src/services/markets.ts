@@ -8,6 +8,7 @@ import {
   type Outcome,
   type PricePoint,
   createMarketSchema,
+  RESOLVE_GRACE_DAYS,
 } from '@watercooler/shared';
 import { placeholders, type DB } from '../db';
 import { badRequest, notFound } from '../lib/http';
@@ -28,6 +29,8 @@ export interface MarketRow {
   resolved_at: number | null;
   resolution_note: string | null;
   pot: number;
+  is_ai: 0 | 1;
+  ai_checked_at: number | null;
   created_at: number;
 }
 
@@ -56,6 +59,10 @@ export function derivedStatus(m: Pick<MarketRow, 'status' | 'close_at'>, now: nu
 /** Betting is allowed only while a market is open and before its close time. */
 export function isBettable(m: Pick<MarketRow, 'status' | 'close_at'>, now: number): boolean {
   return derivedStatus(m, now) === 'open';
+}
+
+export function resolveDeadline(m: Pick<MarketRow, 'settle_at'>): number {
+  return m.settle_at + RESOLVE_GRACE_DAYS * DAY;
 }
 
 export function getMarketRow(db: DB, id: number): MarketRow {
@@ -128,6 +135,7 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       category: r.category,
       status: derivedStatus(r, now),
       isBinary: outcomes.length === 2,
+      isAi: r.is_ai === 1,
       pot: fromCents(r.pot),
       closeAt: r.close_at,
       settleAt: r.settle_at,
@@ -200,10 +208,13 @@ function sparklines(
 
 export type MarketFilter = 'active' | 'closed' | 'resolved' | 'all';
 export type MarketSort = 'trending' | 'pot' | 'new' | 'closing';
+/** People's markets, the AI zone, or both. */
+export type MarketZone = 'human' | 'ai' | 'any';
 
 export interface ListMarketsOptions {
   mode?: 'pool' | 'polymarket';
   filter?: MarketFilter;
+  zone?: MarketZone;
   sort?: MarketSort;
   category?: string;
   search?: string;
@@ -231,6 +242,8 @@ export function listMarkets(db: DB, now: number, opts: ListMarketsOptions = {}):
     case 'all':
       break;
   }
+  if (opts.zone === 'human') where.push('m.is_ai = 0');
+  if (opts.zone === 'ai') where.push('m.is_ai = 1');
   if (opts.category) {
     where.push('m.category = @category');
     params.category = opts.category;
@@ -271,6 +284,7 @@ export function getMarketDetail(db: DB, id: number, now: number): MarketDetail {
     description: row.description,
     resolvedAt: row.resolved_at,
     resolutionNote: row.resolution_note,
+    ...(row.mode === 'pool' ? { resolveBy: resolveDeadline(row) } : {}),
   };
 }
 
@@ -283,7 +297,13 @@ export function recordPriceSnapshot(db: DB, marketId: number, probs: number[], n
   );
 }
 
-export function createMarket(db: DB, creatorId: number, input: CreateMarketInput, now: number): number {
+export function createMarket(
+  db: DB,
+  creatorId: number,
+  input: CreateMarketInput,
+  now: number,
+  opts: { ai?: boolean } = {},
+): number {
   if (!createMarketSchema.safeParse(input).success) throw badRequest('市场配置无效');
   if (input.closeAt <= now + 5 * MINUTE) throw badRequest('截止时间至少要在 5 分钟之后');
   if (input.closeAt > now + 5 * 365 * DAY) throw badRequest('截止时间不能超过 5 年');
@@ -292,8 +312,8 @@ export function createMarket(db: DB, creatorId: number, input: CreateMarketInput
   return db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare(
-        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at, mode, settle_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO markets (question, description, category, creator_id, close_at, created_at, mode, settle_at, is_ai)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.question,
@@ -304,6 +324,7 @@ export function createMarket(db: DB, creatorId: number, input: CreateMarketInput
         now,
         input.mode ?? 'pool',
         settleAt,
+        opts.ai ? 1 : 0,
       );
     const marketId = Number(lastInsertRowid);
     const insertOutcome = db.prepare('INSERT INTO outcomes (market_id, idx, label) VALUES (?, ?, ?)');
@@ -311,6 +332,10 @@ export function createMarket(db: DB, creatorId: number, input: CreateMarketInput
     recordPriceSnapshot(db, marketId, poolShares(input.outcomes.map(() => 0)), now);
     return marketId;
   })();
+}
+
+export function aiMarketsExist(db: DB): boolean {
+  return db.prepare('SELECT 1 FROM markets WHERE is_ai = 1 LIMIT 1').get() !== undefined;
 }
 
 export type HistoryRange = '1d' | '1w' | '1m' | 'all';

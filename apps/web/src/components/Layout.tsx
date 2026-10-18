@@ -3,6 +3,7 @@ import { CURRENCY_NAME } from '@watercooler/shared';
 import clsx from 'clsx';
 import {
   BarChart3,
+  Bot,
   ChevronUp,
   Gift,
   LayoutGrid,
@@ -186,12 +187,14 @@ function UserMenu() {
 function Navbar() {
   const { me, loading } = useMe();
   const creating = useLocation().pathname === '/create';
+  const config = useConfig();
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-panel/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-4">
         <Logo compact />
         <nav className="hidden items-center md:flex">
           <NavItem to="/">市场</NavItem>
+          {config?.aiZone && <NavItem to="/ai">AI 专区</NavItem>}
           <NavItem to="/leaderboard">排行榜</NavItem>
           {me && <NavItem to="/portfolio">我的下注</NavItem>}
         </nav>
@@ -271,9 +274,11 @@ function Ticker() {
 
 function MobileNav() {
   const { me } = useMe();
+  const config = useConfig();
   const items = [
     { to: '/', icon: LayoutGrid, label: '市场' },
-    { to: '/leaderboard', icon: Trophy, label: '排行' },
+    // Five slots: the AI zone takes the leaderboard's (still linked from the home page and footer).
+    config?.aiZone ? { to: '/ai', icon: Bot, label: 'AI 专区' } : { to: '/leaderboard', icon: Trophy, label: '排行' },
     { to: '/create', icon: Plus, label: '创建', primary: true },
     { to: me ? '/portfolio' : '/login', icon: BarChart3, label: '下注' },
     { to: me ? `/u/${me.id}` : '/login', icon: UserIcon, label: '我的' },
@@ -340,11 +345,13 @@ function SideDock() {
 
 function Footer() {
   const { me } = useMe();
+  const config = useConfig();
   const columns = [
     {
       title: '市场',
       links: [
         { to: '/', label: '全部市场' },
+        ...(config?.aiZone ? [{ to: '/ai', label: 'AI 专区' }] : []),
         { to: '/?sort=closing', label: '即将截止' },
         { to: '/?status=resolved', label: '已结束' },
       ],

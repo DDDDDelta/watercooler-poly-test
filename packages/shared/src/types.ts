@@ -9,6 +9,8 @@ export interface UserRef {
 
 export interface PublicUser extends UserRef {
   createdAt: number;
+  /** AI bot account: only plays in the AI zone and is left off the leaderboard. */
+  isBot: boolean;
 }
 
 export interface Me extends PublicUser {
@@ -21,6 +23,10 @@ export interface AppConfig {
   startingBalance: number;
   dailyBonus: number;
   privateMode: boolean;
+  /** Whether the AI zone exists (bots are running or there are AI markets). */
+  aiZone: boolean;
+  /** Whether the WeCom (企业微信) bot is connected, so accounts can be bound to it. */
+  wecom: boolean;
 }
 
 /** `closed` is derived: betting time is over but the creator has not announced the result yet. */
@@ -45,6 +51,8 @@ export interface MarketSummary {
   category: string;
   status: MarketStatus;
   isBinary: boolean;
+  /** Created by an AI bot; lives in the AI zone. */
+  isAi: boolean;
   /** Pool pot, or currently locked complete-set collateral for a Polymarket market. */
   pot: number;
   closeAt: number;
@@ -61,6 +69,8 @@ export interface MarketSummary {
 }
 
 export interface MarketDetail extends MarketSummary {
+  /** Pool-only automatic refund deadline; Polymarket markets never time out. */
+  resolveBy?: number;
   description: string;
   resolvedAt: number | null;
   resolutionNote: string | null;
@@ -214,7 +224,8 @@ export interface ExchangeState {
 export interface UserProfile {
   user: PublicUser;
   stats: UserStats;
-  rank: number;
+  /** Leaderboard position; null for bots, which are not ranked. */
+  rank: number | null;
   bets: PortfolioBet[];
   recentBets: Bet[];
   createdMarkets: MarketSummary[];
@@ -226,9 +237,36 @@ export interface LeaderboardEntry {
   stats: UserStats;
 }
 
+/** The AI zone at a glance. */
+export interface AiZoneSummary {
+  bots: number;
+  openMarkets: number;
+  /** Total staked in AI markets so far. */
+  pot: number;
+  /** What people (not bots) have won or lost on settled AI markets. */
+  humanProfit: number;
+  /** The bots with the most money. */
+  richestBots: LeaderboardEntry[];
+}
+
+/** Stats for markets made by people (the AI zone has its own summary). */
 export interface SiteStats {
   openMarkets: number;
   totalStaked: number;
   bettors: number;
   users: number;
+}
+
+/** A site account's link to a WeCom (企业微信) account. */
+export interface WecomBinding {
+  wecomUserId: string;
+  createdAt: number;
+}
+
+/** What a binding link would do, shown before the user confirms. */
+export interface WecomBindRequest {
+  wecomUserId: string;
+  expiresAt: number;
+  /** The signed-in user's current binding, which confirming would replace. */
+  current: WecomBinding | null;
 }
