@@ -180,7 +180,9 @@ function ResolutionBanner({ market }: { market: MarketDetail }) {
               ? market.mode === 'polymarket'
                 ? '市场已取消，Yes / No 每份已兑回 0.50 水滴'
                 : '市场已取消，所有下注已全额退回'
-              : `交易已停止，等待 ${market.creator.displayName} 在结算时间到达后公布结果`}
+              : market.mode === 'polymarket'
+                ? `交易已停止，等待 ${market.creator.displayName} 在结算时间到达后公布结果`
+                : `下注已截止，等待 ${market.creator.displayName} 公布结果`}
         </div>
         {market.resolutionNote && <div className="mt-1 text-fg/70">{market.resolutionNote}</div>}
         <div className="mt-1 text-xs opacity-70">
@@ -409,7 +411,8 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
     onError: (err) => toast.error(errorMessage(err)),
   });
   if (market.status === 'resolved' || market.status === 'cancelled') return null;
-  const canResolve = Date.now() >= market.settleAt;
+  // Pool creators may announce as soon as they know; Polymarket waits for the settlement time.
+  const canResolve = market.mode === 'pool' || Date.now() >= market.settleAt;
 
   return (
     <Card className="border-brand/30 p-5">
@@ -424,8 +427,8 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
           </>
         ) : (
           <>
-            结算时间到达后才可公布结果；7 天未公布会自动取消并全额退款。 押中的人按比例瓜分全部{' '}
-            {formatMoney(market.pot)} {CURRENCY_NAME} 奖池；题目出了问题可以取消，所有下注全额退回。操作不可撤销。
+            {`结果确定后就可以公布，公布后立即停止下注；${formatDate(market.resolveBy!)} 前没公布会自动取消并全额退款。`}
+            {`押中的人按比例瓜分全部 ${formatMoney(market.pot)} ${CURRENCY_NAME} 奖池；题目出了问题可以取消，所有下注全额退回。操作不可撤销。`}
           </>
         )}
       </p>

@@ -440,6 +440,59 @@ describe('WeCom bot', () => {
     expect((await bob.get('/auth/me')).body.user.balance).toBe(1001.6);
   });
 
+  it('lets pool creators announce early, holds Polymarket until settleAt, and reports share payouts', async () => {
+    const { env, fake, model, bind, notices } = wecomEnv();
+    const alice = await bind('alice', 'zhangsan');
+    const bob = await bind('bob', 'lisi', 'group2');
+    const closeAt = env.clock.now + DAY;
+    const create = async (mode: string) =>
+      (
+        await alice.post('/markets', {
+          question: `${mode} 下周会发年终奖吗？`,
+          category: '公司',
+          mode,
+          closeAt,
+          outcomes: ['Yes', 'No'],
+        })
+      ).body.id as number;
+    const pool = await create('pool');
+    const poly = await create('polymarket');
+    const [yes] = (await alice.get(`/markets/${poly}`)).body.market.outcomes;
+    expect((await bob.post(`/markets/${poly}/split`, { quantity: 10 })).status).toBe(200);
+    await bob.post(`/markets/${poly}/orders`, { outcomeId: yes.id, side: 'sell', price: 0.9, quantity: 2 });
+
+    model.script(callTool('my_account', {}), answer('你有 10 份 Yes'));
+    await fake.message('lisi', '@小助手 我的持仓', 'group2');
+    const account = JSON.parse(toolResults(model.requests.at(-1)!)[0]!.content);
+    expect(account.polymarketPositions).toContainEqual(
+      expect.objectContaining({ marketId: poly, outcome: 'Yes', shares: 10, reservedForSale: 2 }),
+    );
+    expect(account.polymarketOpenOrders).toEqual([
+      { question: 'polymarket 下周会发年终奖吗？', outcome: 'Yes', side: '卖', price: 0.9, remaining: 2 },
+    ]);
+
+    // Before the settlement time a Polymarket card could only fail, so none is made.
+    model.script(callTool('resolve_market', { marketId: poly, outcome: 'Yes' }), answer('还不能公布'));
+    expect((await fake.message('zhangsan', '@小助手 polymarket 那个结果是 Yes')).card).toBeUndefined();
+    expect(toolResults(model.requests.at(-1)!)[0]).toMatchObject({ isError: true });
+    expect(toolResults(model.requests.at(-1)!)[0]!.content).toContain('之后才能公布');
+
+    // A pool market can be announced before it closes.
+    model.script(callTool('resolve_market', { marketId: pool, outcome: 'Yes' }), answer('请确认'));
+    const early = await fake.message('zhangsan', '@小助手 pool 那个已经确定是 Yes 了');
+    expect(early.card!.sub_title_text).toContain('提前结束下注');
+    expect((await fake.click('zhangsan', early.card!))[0]!.card.main_title!.title).toBe('✅ 已公布结果并结算');
+
+    env.clock.now = closeAt + 1;
+    model.script(callTool('resolve_market', { marketId: poly, outcome: 'Yes' }), answer('请确认'));
+    const resolving = await fake.message('zhangsan', '@小助手 polymarket 那个结果是 Yes');
+    expect((await fake.click('zhangsan', resolving.card!))[0]!.card.main_title!.title).toBe('✅ 已公布结果并结算');
+    expect((await bob.get('/auth/me')).body.user.balance).toBe(1000);
+
+    await notices();
+    expect(fake.sent.filter((m) => m.chatId === 'group2').at(-1)!.text).toContain('BOB：兑回 10');
+  });
+
   it('reminds at settlement time and only warns pool markets about automatic refunds', async () => {
     const { env, fake, bind, notices } = wecomEnv();
     const alice = await bind('alice', 'zhangsan');

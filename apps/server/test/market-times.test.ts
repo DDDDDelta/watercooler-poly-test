@@ -45,7 +45,8 @@ it.each(['pool', 'polymarket'] as const)(
       }
       const ledgerCount = () => (e.db.prepare('SELECT COUNT(*) AS n FROM ledger').get() as { n: number }).n;
       const before = ledgerCount();
-      expect((await creator.post(`${path}/resolve`, { outcomeId: yes })).status).toBe(409);
+      // Pool creators may announce early (covered separately); Polymarket waits for settleAt.
+      if (mode === 'polymarket') expect((await creator.post(`${path}/resolve`, { outcomeId: yes })).status).toBe(409);
       expect(ledgerCount()).toBe(before);
 
       e.clock.now = closeAt;
@@ -65,7 +66,7 @@ it.each(['pool', 'polymarket'] as const)(
       e.clock.now = settleAt - 1;
       expect((await trader.get(path)).body.market.status).toBe('closed');
       expect((await trader.get('/auth/me')).body.user.balance).toBe(980);
-      expect((await creator.post(`${path}/resolve`, { outcomeId: yes })).status).toBe(409);
+      if (mode === 'polymarket') expect((await creator.post(`${path}/resolve`, { outcomeId: yes })).status).toBe(409);
       e.clock.now = settleAt;
       expect((await trader.get(path)).body.market).toMatchObject({ status: 'closed', resolvedAt: null });
       expect((await creator.post(`${path}/resolve`, { outcomeId: yes })).body).toMatchObject({
@@ -115,3 +116,34 @@ it.each(['pool', 'polymarket'] as const)(
     }
   },
 );
+
+it('lets pool creators announce the result before close, which stops betting', async () => {
+  const e = setup();
+  try {
+    const creator = await e.register('creator');
+    const trader = await e.register('trader');
+    const closeAt = e.clock.now + DAY;
+    const settleAt = closeAt + 10 * DAY;
+    const id = (
+      await creator.post('/markets', {
+        question: '提前知道结果的预测？',
+        category: '其他',
+        closeAt,
+        settleAt,
+        outcomes: ['会', '不会'],
+      })
+    ).body.id;
+    const [yes, no] = (await trader.get(`/markets/${id}`)).body.market.outcomes.map((o: { id: number }) => o.id);
+    await trader.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 10 });
+    await creator.post(`/markets/${id}/bets`, { outcomeId: no, amount: 30 });
+
+    e.clock.now += 60_000;
+    const resolved = (await creator.post(`/markets/${id}/resolve`, { outcomeId: yes })).body;
+    expect(resolved).toMatchObject({ status: 'resolved', resolvedAt: e.clock.now, closeAt: e.clock.now });
+    expect(resolved.settleAt).toBe(e.clock.now);
+    expect((await trader.get('/auth/me')).body.user.balance).toBe(1030);
+    expect((await trader.post(`/markets/${id}/bets`, { outcomeId: yes, amount: 1 })).status).toBe(409);
+  } finally {
+    e.db.close();
+  }
+});

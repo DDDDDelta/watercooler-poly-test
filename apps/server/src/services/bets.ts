@@ -183,7 +183,9 @@ export function resolveMarket(
     const market = getMarketRow(db, marketId);
     assertCreator(market, actorId);
     assertUnsettled(market);
-    if (now < market.settle_at) throw conflict('尚未到结算时间，暂不能公布结果');
+    // Polymarket traders price in the settlement time, so it binds there; pool creators may
+    // announce as soon as the result is known, which also stops betting.
+    if (market.mode === 'polymarket' && now < market.settle_at) throw conflict('尚未到结算时间，暂不能公布结果');
     const outcomes = getOutcomeRows(db, marketId);
     if (!outcomes.some((o) => o.id === outcomeId)) throw notFound('选项不存在');
 
@@ -205,8 +207,8 @@ export function resolveMarket(
     }
     db.prepare(
       `UPDATE markets SET status = 'resolved', resolved_outcome_id = ?, resolved_at = ?, resolution_note = ?,
-              close_at = MIN(close_at, ?) WHERE id = ?`,
-    ).run(outcomeId, now, note || null, now, marketId);
+              close_at = MIN(close_at, ?), settle_at = MIN(settle_at, ?) WHERE id = ?`,
+    ).run(outcomeId, now, note || null, now, now, marketId);
     recordPriceSnapshot(
       db,
       marketId,

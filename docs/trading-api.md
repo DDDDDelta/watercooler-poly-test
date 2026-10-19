@@ -37,7 +37,7 @@
 
 创建市场使用 `closeAt` 设置停止交易时间，另用 `settleAt` 设置结算时间，均为 Unix 毫秒；`settleAt >= closeAt`，两者均不能超过未来 5 年。省略 `settleAt` 时默认为 `closeAt`，旧市场也迁移为这两个时间相同。
 
-到 `closeAt` 停止下注、下单和拆分/合并，未成交订单撤销并释放冻结资产；持仓保留。到 `settleAt` 后创建者才可调用 `/resolve` 公布结果并立即兑付，提前调用返回 409。Polymarket 市场不可取消，包括创建者手动取消和超时自动取消；未公布结果时保留持仓和抵押资金，一直等待结算，不会自动选择 Yes/No。撤销未成交订单仍受支持。列表和详情返回 `closeAt, settleAt`，详情另外返回实际结算时间 `resolvedAt`，Polymarket 不返回 `resolveBy`。奖池市场仍可由创建者主动取消，也会在 `settleAt + 7 天` 未公布时自动取消、全额退款，详情返回对应的 `resolveBy`。
+到 `closeAt` 停止下注、下单和拆分/合并，未成交订单撤销并释放冻结资产；持仓保留。Polymarket 市场到 `settleAt` 后创建者才可调用 `/resolve` 公布结果并立即兑付，提前调用返回 409；奖池市场的创建者随时可以公布，提前公布会立即停止下注。Polymarket 市场不可取消，包括创建者手动取消和超时自动取消；未公布结果时保留持仓和抵押资金，一直等待结算，不会自动选择 Yes/No。撤销未成交订单仍受支持。列表和详情返回 `closeAt, settleAt`，详情另外返回实际结算时间 `resolvedAt`，Polymarket 不返回 `resolveBy`。奖池市场仍可由创建者主动取消，也会在 `settleAt + 7 天` 未公布时自动取消、全额退款，详情返回对应的 `resolveBy`。
 
 ## 订单与幂等
 

@@ -35,9 +35,13 @@ interface BettorResult {
   returned: number;
 }
 
-/** Tell each bound bettor how a market they bet on settled, in the group they last used. */
+/** Tell each bound bettor (or share holder) how a market settled, in the group they last used. */
 function settlementMessages(deps: NotifierDeps, market: MarketRow): Map<string, string> {
   const { db } = deps;
+  const poly = market.mode === 'polymarket';
+  const holds = poly
+    ? 'EXISTS (SELECT 1 FROM exchange_positions WHERE market_id = @m AND user_id = u.id AND quantity > 0)'
+    : 'EXISTS (SELECT 1 FROM bets WHERE market_id = @m AND user_id = u.id)';
   const rows = db
     .prepare(
       `SELECT u.display_name, wb.chat_id,
@@ -46,7 +50,7 @@ function settlementMessages(deps: NotifierDeps, market: MarketRow): Map<string, 
                 WHERE market_id = @m AND user_id = u.id AND kind IN ('payout', 'refund')) AS returned
          FROM wecom_bindings wb JOIN users u ON u.id = wb.user_id
         WHERE wb.chat_id IS NOT NULL
-          AND EXISTS (SELECT 1 FROM bets WHERE market_id = @m AND user_id = u.id)
+          AND ${holds}
         ORDER BY u.id`,
     )
     .all({ m: market.id }) as BettorResult[];
@@ -60,7 +64,9 @@ function settlementMessages(deps: NotifierDeps, market: MarketRow): Map<string, 
       : null;
   // Nobody backed the winner: everyone got their stake back instead of a payout.
   const refunded =
-    winner !== null && !db.prepare(`SELECT 1 FROM ledger WHERE market_id = ? AND kind = 'payout'`).get(market.id);
+    !poly &&
+    winner !== null &&
+    !db.prepare(`SELECT 1 FROM ledger WHERE market_id = ? AND kind = 'payout'`).get(market.id);
   const head =
     winner !== null
       ? `📢 「${market.question}」公布结果：**${winner}**`
@@ -68,6 +74,8 @@ function settlementMessages(deps: NotifierDeps, market: MarketRow): Map<string, 
   const messages = new Map<string, string>();
   for (const [chatId, people] of byChat) {
     const lines = people.map((p) => {
+      // Share holders get 1 per winning share; their cost is spread over many trades, so report the payout only.
+      if (poly) return `- ${p.display_name}：${p.returned > 0 ? `兑回 ${money(p.returned)}` : '没有获胜份额'}`;
       if (winner === null) return `- ${p.display_name}：退回 ${money(p.returned)}`;
       if (refunded) return `- ${p.display_name}：没人押中，退回 ${money(p.returned)}`;
       return p.returned > 0

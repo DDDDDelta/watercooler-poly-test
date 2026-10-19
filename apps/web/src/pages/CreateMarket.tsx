@@ -264,7 +264,7 @@ export default function CreateMarket() {
             hint={
               mode === 'polymarket'
                 ? '到时起可公布结果并兑付；未公布则继续等待，不会自动取消'
-                : '到时起可公布结果并兑付；7 天未公布会自动取消退款'
+                : '预计知道结果的时间，结果确定后可以提前公布；到时 7 天后还没公布会自动取消退款'
             }
           >
             <DateTimeInput label="结算时间" value={settleAt} min={closeAt} onChange={setSettleAt} />
@@ -294,7 +294,7 @@ export default function CreateMarket() {
               {mode === 'polymarket'
                 ? '获胜份额每份兑回 1 水滴，落败份额兑回 0；Polymarket 市场不可取消。'
                 : '押中的人按比例瓜分奖池，取消时全额退款。'}
-              结果由你在结算时间到达后公布。
+              {mode === 'polymarket' ? '结果由你在结算时间到达后公布。' : '结果确定后由你随时公布，公布后停止下注。'}
               {mode === 'polymarket'
                 ? '未公布时保留持仓和资金，继续等待结算，不会自动取消。'
                 : '结算时间后 7 天未公布，自动取消并全额退款。'}

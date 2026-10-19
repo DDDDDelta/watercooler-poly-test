@@ -17,6 +17,7 @@ import type { DB } from '../db';
 import { HttpError } from '../lib/http';
 import { DAY, MINUTE } from '../lib/time';
 import { getUserStakes } from '../services/bets';
+import { exchangePortfolio, exchangePortfolioOrders } from '../services/exchange';
 import {
   derivedStatus,
   getMarketDetail,
@@ -206,7 +207,7 @@ const tools: ToolDef[] = [
     tool: {
       name: 'my_account',
       description:
-        '用户自己的账户：余额、能否签到、已结算盈亏和排名、进行中的押注、自己建的待公布的盘。净值和排名不计入未结算市场的盈亏。',
+        '用户自己的账户：余额、能否签到、已结算盈亏和排名、进行中的押注、Polymarket 持仓和挂单、自己建的待公布的盘。净值和排名不计入未结算市场的盈亏。',
       input_schema: { type: 'object', properties: {} },
     },
     run: (ctx) => {
@@ -243,6 +244,25 @@ const tools: ToolDef[] = [
           .filter((b) => b.state !== 'active')
           .slice(0, 5)
           .map((b) => ({ question: b.market.question, outcome: b.outcomeLabel, result: b.state, pnl: b.pnl })),
+        polymarketPositions: exchangePortfolio(ctx.db, ctx.userId, ctx.now)
+          .filter((p) => p.status === 'open' || p.status === 'closed')
+          .slice(0, 15)
+          .map((p) => ({
+            marketId: p.marketId,
+            question: p.question,
+            outcome: p.outcomeLabel,
+            shares: p.quantity,
+            reservedForSale: p.reserved,
+          })),
+        polymarketOpenOrders: exchangePortfolioOrders(ctx.db, ctx.userId)
+          .slice(0, 15)
+          .map((o) => ({
+            question: o.question,
+            outcome: o.outcomeLabel,
+            side: o.side === 'buy' ? '买' : '卖',
+            price: o.price,
+            remaining: o.remaining,
+          })),
         myMarketsToResolve: toResolve.map((m) => ({ id: m.id, question: m.question })),
       };
     },
@@ -401,7 +421,7 @@ const tools: ToolDef[] = [
     tool: {
       name: 'resolve_market',
       description:
-        '公布用户自己创建的市场的结果并结算：奖池模式按押注比例分配；Polymarket 获胜份额每份兑回 1，落败份额兑回 0。不会马上执行：会发确认卡片，用户确认后才结算，结算后不能撤销。',
+        '公布用户自己创建的市场的结果并结算：奖池模式按押注比例分配；Polymarket 获胜份额每份兑回 1，落败份额兑回 0。Polymarket 要到结算时间后才能公布；奖池结果确定后随时可以公布，提前公布会立即停止下注。不会马上执行：会发确认卡片，用户确认后才结算，结算后不能撤销。',
       input_schema: {
         type: 'object',
         properties: {
@@ -429,6 +449,10 @@ const tools: ToolDef[] = [
           n: number;
         }
       ).n;
+      // Polymarket waits for the settlement time; pool creators may announce early.
+      if (market.mode === 'polymarket' && ctx.now < market.settle_at) {
+        throw new ToolError(`要到结算时间 ${formatTime(market.settle_at, ctx.config.timezone)} 之后才能公布结果`);
+      }
       const early = derivedStatus(market, ctx.now) === 'open';
       const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 1000) : undefined;
       return propose(
@@ -504,4 +528,4 @@ export function runTool(ctx: ToolContext, name: string, input: unknown): { conte
   }
 }
 
-export const RULES = `玩法（奖池制）：每个选项一个奖池，押注进入所选选项的奖池；概率 = 该选项奖池占总奖池的比例。结果公布后，押中的人按押注比例分走整个奖池（包括押错的人的钱）；没人押中就全部退还。网站不抽成也不补贴。市场由创建者自己公布结果，只有奖池市场可主动取消。停止交易与结算时间分开设置，到结算时间后可公布；奖池模式在结算时间后 7 天未公布会自动取消并退款；Polymarket 市场不可取消，保留持仓和抵押资金等待结算，未成交订单仍可撤销。AI 专区的题由 AI 机器人出题和公布，人可以去押注。`;
+export const RULES = `玩法（奖池制）：每个选项一个奖池，押注进入所选选项的奖池；概率 = 该选项奖池占总奖池的比例。结果公布后，押中的人按押注比例分走整个奖池（包括押错的人的钱）；没人押中就全部退还。网站不抽成也不补贴。市场由创建者自己公布结果，只有奖池市场可主动取消。停止交易与结算时间分开设置：Polymarket 市场到结算时间后才能公布；奖池市场结果确定后随时可以公布，提前公布会立即停止下注；奖池模式在结算时间后 7 天未公布会自动取消并退款；Polymarket 市场不可取消，保留持仓和抵押资金等待结算，未成交订单仍可撤销。AI 专区的题由 AI 机器人出题和公布，人可以去押注。`;
