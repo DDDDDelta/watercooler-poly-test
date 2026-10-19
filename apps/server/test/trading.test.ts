@@ -183,19 +183,105 @@ it('rests post-only orders, allows later maker fills, and includes the flag in i
   expect((await e.alice.get('/trading/account')).body.user.balance).toBe(999.4);
 });
 
-it('does not reject post-only orders solely because of own crossed orders', async () => {
+it.each([
+  ['direct buy', 'yes', 'sell', 0.4, 'buy', 0.4, 0.5],
+  ['direct sell', 'yes', 'buy', 0.6, 'sell', 0.6, 0.5],
+  ['complementary mint', 'no', 'buy', 0.6, 'buy', 0.4, 0.5],
+  ['complementary merge', 'no', 'sell', 0.6, 'sell', 0.4, 0.3],
+] as const)(
+  'rejects self-crossing %s before any reservation or counterparty fill',
+  async (_name, makerOutcome, makerSide, makerPrice, side, equalPrice, crossingPrice) => {
+    const e = await fixture();
+    for (const client of [e.alice, e.bob]) await client.post(`/trading/markets/${e.id}/split`, { quantity: 10 });
+    const maker = {
+      marketId: e.id,
+      outcomeId: makerOutcome === 'yes' ? e.yes : e.no,
+      side: makerSide,
+      price: makerPrice,
+      quantity: 2,
+    };
+    const ownOrder = (await e.alice.post('/trading/orders', maker)).body;
+    // Another user's better quote must not fill before the own-order rejection.
+    const otherOrder = await e.bob.post('/trading/orders', {
+      ...maker,
+      price: makerPrice + (makerSide === 'buy' ? 0.1 : -0.1),
+      quantity: 1,
+    });
+    expect(otherOrder.status).toBe(201);
+    const snapshot = () =>
+      [
+        'users',
+        'ledger',
+        'exchange_positions',
+        'exchange_orders',
+        'exchange_trades',
+        'markets',
+        'outcomes',
+        'price_history',
+      ].map((table) => e.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
+    const before = snapshot();
+    for (const postOnly of [false, true]) {
+      for (const price of [equalPrice, crossingPrice]) {
+        const input = {
+          marketId: e.id,
+          outcomeId: e.yes,
+          side,
+          price,
+          quantity: 5,
+          postOnly,
+          clientOrderId: 'self-rejected',
+        };
+        for (const path of ['/trading/orders', `/markets/${e.id}/orders`]) {
+          const result = await e.alice.post(path, input);
+          expect(result.status).toBe(409);
+          expect(result.body.error).toContain(`自己的挂单 #${ownOrder.id}`);
+          expect(result.body.error).toContain('请先撤销旧单');
+          expect(snapshot()).toEqual(before);
+        }
+      }
+    }
+    expect((await e.alice.get('/trading/orders?clientOrderId=self-rejected')).body.items).toEqual([]);
+  },
+);
+
+it('allows non-crossing own quotes, ignores cancelled orders, and preserves idempotency on self-cross checks', async () => {
   const e = await fixture();
-  await e.alice.post(`/trading/markets/${e.id}/split`, { quantity: 4 });
-  await e.alice.post('/trading/orders', { marketId: e.id, outcomeId: e.yes, side: 'sell', price: 0.4, quantity: 2 });
-  const result = await e.alice.post('/trading/orders', {
+  await e.alice.post(`/trading/markets/${e.id}/split`, { quantity: 10 });
+  const input = {
     marketId: e.id,
     outcomeId: e.yes,
     side: 'buy',
-    price: 0.5,
+    price: 0.3,
     quantity: 2,
     postOnly: true,
+    clientOrderId: 'original-bid',
+  };
+  const bid = (await e.alice.post('/trading/orders', input)).body;
+  for (const order of [
+    { outcomeId: e.yes, side: 'sell', price: 0.4 },
+    { outcomeId: e.no, side: 'buy', price: 0.6 },
+  ]) {
+    const result = await e.alice.post('/trading/orders', { ...order, marketId: e.id, quantity: 2, postOnly: true });
+    expect(result.status).toBe(201);
+    expect(result.body.status).toBe('open');
+  }
+  expect((await e.alice.post('/trading/orders', input)).body.id).toBe(bid.id);
+  await e.alice.post(`/trading/orders/${bid.id}/cancel`);
+  const ask = await e.alice.post('/trading/orders', {
+    marketId: e.id,
+    outcomeId: e.yes,
+    side: 'sell',
+    price: 0.3,
+    quantity: 1,
   });
-  expect(result.status).toBe(201);
-  expect(result.body).toMatchObject({ postOnly: true, remaining: 2, status: 'open' });
+  expect(ask.status).toBe(201);
+  // A retry returns the cancelled original, even though a fresh order would now self-cross.
+  expect((await e.alice.post('/trading/orders', input)).body).toMatchObject({ id: bid.id, status: 'cancelled' });
+  const freshInput = { ...input, clientOrderId: 'new-bid' };
+  expect((await e.alice.post('/trading/orders', freshInput)).status).toBe(409);
+  await e.alice.post(`/trading/orders/${ask.body.id}/cancel`);
+  const accepted = await e.alice.post('/trading/orders', freshInput);
+  expect(accepted.status).toBe(201);
+  expect(accepted.body).toMatchObject({ clientOrderId: 'new-bid', status: 'open', remaining: 2 });
   expect((await e.alice.get('/trading/trades')).body.items).toEqual([]);
 });

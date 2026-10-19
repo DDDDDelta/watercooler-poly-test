@@ -42,6 +42,9 @@ export interface Outcome {
   probability: number;
   /** Probability change over the last 24h, or null when unknown. */
   change24h: number | null;
+  /** Actual best resting prices for Polymarket outcomes; null when that side has no orders. */
+  bestBid?: number | null;
+  bestAsk?: number | null;
 }
 
 export interface MarketSummary {
@@ -154,13 +157,13 @@ export interface LedgerEntry {
 
 export interface UserStats {
   balance: number;
-  /** Unsettled pool stakes + exchange shares at mark price + cash locked in bids. */
+  /** Net cash invested in unresolved markets, including order escrow; may be negative after sales/merges. */
   staked: number;
-  /** balance + staked */
+  /** Book value: funded + profit (also balance + staked); excludes all unresolved market P&L. */
   netWorth: number;
   /** Total currency received for free (signup and daily bonus). */
   funded: number;
-  /** netWorth - funded; exchange holdings use the current mark price. */
+  /** Net ledger cash flow from resolved/cancelled markets only, including all trades and payouts. */
   profit: number;
   betCount: number;
   marketsBet: number;

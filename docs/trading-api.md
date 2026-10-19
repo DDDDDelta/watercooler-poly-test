@@ -27,19 +27,23 @@
 | POST | `/trading/markets/:id/split`             | `{quantity}`；每 1 水滴生成 1 Yes + 1 No                                                          |
 | POST | `/trading/markets/:id/merge`             | `{quantity}`；每对未冻结的 Yes/No 兑换 1 水滴                                                     |
 | POST | `/markets/:id/resolve`                   | 创建者公布 `{outcomeId, note?}`，获胜每份兑付 1                                                   |
-| POST | `/markets/:id/cancel`                    | 创建者取消 `{note?}`，Yes/No 当前持有人每份兑回 0.50                                              |
+| POST | `/markets/:id/cancel`                    | 仅奖池市场允许创建者取消 `{note?}`；Polymarket 返回 403                                           |
 
 已有网页使用的 `/markets/:id/orders`、`/exchange`、`/split`、`/merge` 等接口继续保留，共用同一个撮合与账本实现。
+
+`/trading/account`、`/portfolio` 和用户统计中的 `stats.profit` 只统计已结算市场的全部账本净收支；`stats.netWorth = stats.funded + stats.profit` 为入账净值，不按挂单或最近成交价重估持仓。未结算市场的交易盈亏（即使已平仓）暂不计入这两项排名。`stats.balance` 是实际可用余额；`stats.staked = stats.netWorth - stats.balance` 为未结算净投入（含订单冻结资金），回款超过投入时可为负。保留现有字段名以兼容客户端，此口径无需数据库迁移，也适用于历史流水。
 
 ## 停止交易与结算时间
 
 创建市场使用 `closeAt` 设置停止交易时间，另用 `settleAt` 设置结算时间，均为 Unix 毫秒；`settleAt >= closeAt`，两者均不能超过未来 5 年。省略 `settleAt` 时默认为 `closeAt`，旧市场也迁移为这两个时间相同。
 
-到 `closeAt` 停止下注、下单和拆分/合并，未成交订单撤销并释放冻结资产；持仓保留。到 `settleAt` 后创建者才可调用 `/resolve` 公布结果并立即兑付，提前调用返回 409。未公布结果时保留持仓和抵押资金，一直等待结算，不会超时取消或自动选择 Yes/No；创建者仍可主动取消市场。列表和详情返回 `closeAt, settleAt`，详情另外返回实际结算时间 `resolvedAt`，Polymarket 不返回 `resolveBy`。奖池模式仍在 `settleAt + 7 天` 未公布时自动取消、全额退款，详情返回对应的 `resolveBy`。
+到 `closeAt` 停止下注、下单和拆分/合并，未成交订单撤销并释放冻结资产；持仓保留。到 `settleAt` 后创建者才可调用 `/resolve` 公布结果并立即兑付，提前调用返回 409。Polymarket 市场不可取消，包括创建者手动取消和超时自动取消；未公布结果时保留持仓和抵押资金，一直等待结算，不会自动选择 Yes/No。撤销未成交订单仍受支持。列表和详情返回 `closeAt, settleAt`，详情另外返回实际结算时间 `resolvedAt`，Polymarket 不返回 `resolveBy`。奖池市场仍可由创建者主动取消，也会在 `settleAt + 7 天` 未公布时自动取消、全额退款，详情返回对应的 `resolveBy`。
 
 ## 订单与幂等
 
-下单可增加布尔参数 `postOnly`，默认 `false`。设为 `true` 时只允许挂单：如果会与其他用户的普通订单或互补订单立即成交，即使只会成交一小部分，也返回 HTTP 409 并拒绝整笔订单，不产生订单记录、冻结资产或成交。成功挂入的订单仍可被之后的订单成交，查询响应包含 `postOnly` 标记。自己的订单不会触发自成交，也不会单独导致 Post-only 拒绝。
+下单可增加布尔参数 `postOnly`，默认 `false`。设为 `true` 时只允许挂单：如果会与其他用户的普通订单或互补订单立即成交，即使只会成交一小部分，也返回 HTTP 409 并拒绝整笔订单，不产生订单记录、冻结资产或成交。成功挂入的订单仍可被之后的订单成交，查询响应包含 `postOnly` 标记。
+
+所有新订单（含 Post-only）都禁止与自己的未成交挂单交叉，价格刚好相等也视为交叉；检查包含同一选项的买卖单及互补选项的同方向订单。发现交叉即返回 HTTP 409，提示冲突订单编号并要求先撤旧单或调整价格；旧单保持不变，新单不会冻结资产、产生订单记录或与其他用户部分成交。已成交和已撤销的订单不参与检查；已接受订单的幂等重试仍返回原订单。
 
 `postOnly` 属于订单幂等参数，复用同一个 `clientOrderId` 时不能更改。被拒绝的订单不会占用客户端编号。
 
@@ -55,7 +59,9 @@
 
 本人成交包含 `id,marketId,orderId,outcomeId,outcomeLabel,side,price,amount,quantity,role,kind,createdAt`。`role` 为 `maker/taker`，`kind` 为 `transfer/mint/merge`。`price` 始终按本人的选项返回。例如 Yes 买单 0.40 与 No 买单 0.60 成交，Yes 用户看到 0.40，No 用户看到 0.60。`amount=price×quantity`，是该笔成交金额，不是利润；`side` 表示买入或卖出。
 
-公开市场成交以触发成交的订单（taker）的选项和价格记录，一次成交只出现一条；通过 `outcomeId` 区分 Yes/No。盘口同时包含直接订单和互补订单的有效报价，不保证本人能吃掉自己的流动性。所有时间为 Unix 毫秒。
+公开市场成交以触发成交的订单（taker）的选项和价格记录，一次成交只出现一条；通过 `outcomeId` 区分 Yes/No。盘口按选项和买卖方向仅展示实际未成交挂单，同价汇总剩余份数，不展示互补换算报价。互补撮合仍正常执行；自己的订单不会与自己成交。所有时间为 Unix 毫秒。
+
+市场列表及详情的 Polymarket 选项额外返回 `bestBid` / `bestAsk`：该选项实际买单的最高价、实际卖单的最低价，单位为每份水滴；没有对应挂单或交易已截止时为 `null`。网页展示这些挂单价，不将 `probability` 字段作为可成交报价；该字段仍保留用于兼容和内部估值。
 
 ## 错误
 

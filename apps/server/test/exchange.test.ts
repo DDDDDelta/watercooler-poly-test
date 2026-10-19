@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import Database from 'better-sqlite3';
-import { migrations } from '../src/db/migrations';
 import { cancelOrder, placeOrder, splitMerge } from '../src/services/exchange';
-import { resolveMarket } from '../src/services/bets';
+import { cancelMarket, resolveMarket } from '../src/services/bets';
+import { createAction, executeAction } from '../src/wecom/actions';
+import { runTool, type ToolContext } from '../src/wecom/tools';
 import { HttpError } from '../src/lib/http';
 import { setup } from './helpers';
 
@@ -37,26 +37,6 @@ async function fixture() {
 }
 
 describe('Polymarket exchange', () => {
-  it('preserves shipped pool data when applying the new migration', () => {
-    const db = new Database(':memory:');
-    try {
-      for (const sql of migrations.slice(0, -1)) db.exec(sql);
-      db.exec(`INSERT INTO users(id,username,display_name,password_hash,balance,created_at) VALUES (1,'old','old','hash',90000,0);
-        INSERT INTO markets(id,question,category,creator_id,close_at,pot,created_at) VALUES (1,'old market','生活',1,100,10000,0);
-        INSERT INTO outcomes(id,market_id,idx,label,pool) VALUES (1,1,0,'是',10000),(2,1,1,'否',0);
-        INSERT INTO bets(user_id,market_id,outcome_id,amount,created_at) VALUES (1,1,1,10000,0);
-        INSERT INTO ledger(user_id,kind,amount,balance_after,market_id,created_at) VALUES (1,'bet',-10000,90000,1,0);`);
-      db.exec(migrations.at(-1)!);
-      expect(db.prepare('SELECT mode,pot FROM markets').get()).toEqual({ mode: 'pool', pot: 10000 });
-      expect(db.prepare('SELECT close_at,settle_at FROM markets').get()).toEqual({ close_at: 100, settle_at: 100 });
-      expect(db.prepare('SELECT balance FROM users').get()).toEqual({ balance: 90000 });
-      expect(db.prepare('SELECT kind,amount FROM ledger').get()).toEqual({ kind: 'bet', amount: -10000 });
-      expect(db.prepare('SELECT amount FROM bets').get()).toEqual({ amount: 10000 });
-    } finally {
-      db.close();
-    }
-  });
-
   it('splits and merges complete sets, tracks locked assets and rejects overspending/overselling', async () => {
     const e = await fixture();
     expect((await e.alice.post(`${e.base}/split`, { quantity: 10 })).status).toBe(200);
@@ -121,11 +101,13 @@ describe('Polymarket exchange', () => {
     expect(await e.balance()).toBe(997.6);
   });
 
-  it('mints complementary buys with maker pricing and combines direct/implied liquidity by price', async () => {
+  it('mints complementary buys with maker pricing without displaying implied sell orders', async () => {
     const e = await fixture();
     await e.order(e.bob, e.no, 'buy', 0.65, 4);
-    const implied = (await e.state()).books.find((b: any) => b.outcomeId === e.yes);
-    expect(implied.asks).toEqual([{ price: 0.35, quantity: 4 }]);
+    expect((await e.state()).books).toEqual([
+      { outcomeId: e.yes, bids: [], asks: [], lastPrice: null },
+      { outcomeId: e.no, bids: [{ price: 0.65, quantity: 4 }], asks: [], lastPrice: null },
+    ]);
     const incoming = await e.order(e.alice, e.yes, 'buy', 0.5, 6);
     expect(incoming.body.remaining).toBe(2);
     expect(await e.balance()).toBe(997.6); // 1.40 paid + 1.00 still locked
@@ -135,6 +117,78 @@ describe('Polymarket exchange', () => {
     await e.alice.post(`${e.base}/orders/${incoming.body.id}/cancel`);
     expect(await e.balance()).toBe(998.6);
     expect((await e.state()).positions.find((p: any) => p.outcomeId === e.yes).quantity).toBe(4);
+  });
+
+  it('exposes actual best quotes in market summaries without inventing prices for empty or closed books', async () => {
+    const e = await fixture();
+    const quotes = (market: any) => market.outcomes.map(({ bestBid, bestAsk }: any) => [bestBid, bestAsk]);
+    const empty = [
+      [null, null],
+      [null, null],
+    ];
+    expect(quotes((await e.alice.get(e.base)).body.market)).toEqual(empty);
+    await e.order(e.bob, e.no, 'buy', 0.52, 10);
+    expect(quotes((await e.alice.get(e.base)).body.market)).toEqual([
+      [null, null],
+      [0.52, null],
+    ]);
+    await e.bob.post(`${e.base}/split`, { quantity: 10 });
+    await e.order(e.bob, e.yes, 'sell', 0.6, 3);
+    const bestAsk = (await e.order(e.bob, e.yes, 'sell', 0.55, 2)).body;
+    await e.order(e.alice, e.yes, 'buy', 0.3, 4);
+    const bid = (await e.order(e.carol, e.yes, 'buy', 0.4, 2)).body;
+    const expected = [
+      [0.4, 0.55],
+      [0.52, null],
+    ];
+    expect(quotes((await e.alice.get(e.base)).body.market)).toEqual(expected);
+    expect(quotes((await e.alice.get('/markets?mode=polymarket')).body[0])).toEqual(expected);
+    await e.bob.post(`${e.base}/orders/${bestAsk.id}/cancel`);
+    await e.carol.post(`${e.base}/orders/${bid.id}/cancel`);
+    expect(quotes((await e.alice.get(e.base)).body.market)).toEqual([
+      [0.3, 0.6],
+      [0.52, null],
+    ]);
+    e.clock.now += 86400000;
+    expect(quotes((await e.alice.get(e.base)).body.market)).toEqual(empty);
+  });
+
+  it('shows only actual remaining orders, aggregated and sorted, in both book endpoints', async () => {
+    const e = await fixture();
+    await e.bob.post(`${e.base}/split`, { quantity: 20 });
+    await e.order(e.bob, e.no, 'sell', 0.6, 7);
+    await e.order(e.bob, e.yes, 'sell', 0.7, 2);
+    await e.order(e.bob, e.yes, 'sell', 0.48, 5);
+    await e.order(e.bob, e.yes, 'sell', 0.48, 2);
+    await e.order(e.bob, e.no, 'buy', 0.52, 4);
+    await e.order(e.bob, e.yes, 'buy', 0.4, 3);
+    await e.order(e.bob, e.yes, 'buy', 0.4, 6);
+    await e.order(e.carol, e.yes, 'buy', 0.45, 2);
+    await e.order(e.alice, e.yes, 'buy', 0.48, 1);
+    const cancelled = (await e.order(e.bob, e.yes, 'buy', 0.3, 1)).body;
+    await e.bob.post(`${e.base}/orders/${cancelled.id}/cancel`);
+    const expected = [
+      {
+        outcomeId: e.yes,
+        bids: [
+          { price: 0.45, quantity: 2 },
+          { price: 0.4, quantity: 9 },
+        ],
+        asks: [
+          { price: 0.48, quantity: 6 },
+          { price: 0.7, quantity: 2 },
+        ],
+        lastPrice: 0.48,
+      },
+      {
+        outcomeId: e.no,
+        bids: [{ price: 0.52, quantity: 4 }],
+        asks: [{ price: 0.6, quantity: 7 }],
+        lastPrice: 0.52,
+      },
+    ];
+    expect((await e.state()).books).toEqual(expected);
+    expect((await e.client().get(`/trading/markets/${e.id}/book`)).body.books).toEqual(expected);
   });
 
   it('merges complementary sell orders and releases exactly one unit per pair', async () => {
@@ -188,16 +242,178 @@ describe('Polymarket exchange', () => {
     expect((await e.alice.get('/portfolio')).body.stats.netWorth).toBe(1060);
   });
 
-  it('cancels at 50/50 to current holders instead of reversing past trades', async () => {
+  it('keeps profit and net-worth rankings immune to quotes and tiny trades until settlement', async () => {
+    const e = await fixture();
+    await e.bob.post(`${e.base}/split`, { quantity: 100 });
+    await e.order(e.carol, e.no, 'buy', 0.7, 100);
+    await e.order(e.bob, e.no, 'sell', 0.7, 100);
+    const rankings = async () => {
+      const result = [];
+      for (const sort of ['profit', 'netWorth']) {
+        result.push(
+          (await e.alice.get(`/leaderboard?sort=${sort}`)).body.map((entry: any) => ({
+            user: entry.user.username,
+            rank: entry.rank,
+            profit: entry.stats.profit,
+            netWorth: entry.stats.netWorth,
+          })),
+        );
+      }
+      return result;
+    };
+    const before = await rankings();
+    expect(before[0]).toEqual([
+      { user: 'alice', rank: 1, profit: 0, netWorth: 1000 },
+      { user: 'bob', rank: 2, profit: 0, netWorth: 1000 },
+      { user: 'carol', rank: 3, profit: 0, netWorth: 1000 },
+    ]);
+
+    // The review's attack: 1-share quotes reprice 100 shares without a fill.
+    const bid = await e.order(e.bob, e.yes, 'buy', 0.98, 1);
+    const ask = await e.order(e.bob, e.yes, 'sell', 0.99, 1);
+    expect([bid.status, ask.status]).toEqual([201, 201]);
+    expect(e.db.prepare('SELECT mark_price FROM outcomes WHERE id = ?').get(e.yes)).toEqual({ mark_price: 98.5 });
+    expect(e.db.prepare('SELECT COUNT(*) AS n FROM exchange_trades').get()).toEqual({ n: 1 });
+    expect(await rankings()).toEqual(before);
+    for (const path of ['/portfolio', '/trading/account', '/users/2']) {
+      expect((await e.bob.get(path)).body.stats).toMatchObject({
+        balance: 969.02,
+        staked: 30.98,
+        profit: 0,
+        netWorth: 1000,
+      });
+    }
+    await e.bob.post(`${e.base}/orders/${bid.body.id}/cancel`);
+    await e.bob.post(`${e.base}/orders/${ask.body.id}/cancel`);
+    expect(await rankings()).toEqual(before);
+
+    // Using a small real trade instead of a quote cannot mark up the remaining shares either.
+    await e.order(e.bob, e.yes, 'sell', 0.99, 1);
+    await e.order(e.carol, e.yes, 'buy', 0.99, 1);
+    await e.order(e.bob, e.no, 'buy', 0.2, 3);
+    expect(await rankings()).toEqual(before);
+    e.clock.now += 86400000;
+    expect((await e.alice.get(e.base)).body.market.status).toBe('closed');
+    expect(await rankings()).toEqual(before);
+
+    expect((await e.alice.post(`${e.base}/resolve`, { outcomeId: e.yes })).status).toBe(200);
+    const bob = (await e.bob.get('/portfolio')).body.stats;
+    const carol = (await e.carol.get('/trading/account')).body.stats;
+    expect(bob).toMatchObject({ balance: 1069.99, staked: 0, netWorth: 1069.99, profit: 69.99 });
+    expect(carol).toMatchObject({ balance: 930.01, staked: 0, netWorth: 930.01, profit: -69.99 });
+    expect((await e.bob.get('/leaderboard')).body.map((entry: any) => entry.user.username)).toEqual([
+      'bob',
+      'alice',
+      'carol',
+    ]);
+  });
+
+  it('defers exited trading profits and accounts for mint, merge, partial fills, bonuses and other open markets', async () => {
+    const e = await fixture();
+    // Mint at 0.40/0.60, sell part at a profit, then merge the rest with bought No shares.
+    await e.order(e.alice, e.yes, 'buy', 0.4, 10);
+    await e.order(e.bob, e.no, 'buy', 0.6, 10);
+    const partial = await e.order(e.alice, e.yes, 'sell', 0.5, 10);
+    await e.order(e.carol, e.yes, 'buy', 0.8, 4);
+    await e.alice.post(`${e.base}/orders/${partial.body.id}/cancel`);
+    await e.order(e.bob, e.no, 'sell', 0.4, 6);
+    await e.order(e.alice, e.no, 'buy', 0.6, 6);
+    await e.alice.post(`${e.base}/merge`, { quantity: 6 });
+    // Complementary sells merge the remaining sets and leave everyone flat.
+    await e.order(e.carol, e.yes, 'sell', 0.5, 4);
+    await e.order(e.bob, e.no, 'sell', 0.5, 4);
+    expect((await e.state()).collateral).toBe(0);
+    expect((await e.alice.get('/portfolio')).body.stats).toMatchObject({
+      balance: 1001.6,
+      staked: -1.6,
+      profit: 0,
+      netWorth: 1000,
+    });
+    expect((await e.bob.get('/portfolio')).body.stats).toMatchObject({ profit: 0, netWorth: 1000 });
+
+    const pool = await e.alice.post('/markets', {
+      question: '另一个尚未结算的奖池市场？',
+      category: '生活',
+      outcomes: ['是', '否'],
+      closeAt: e.clock.now + 3 * 86400000,
+    });
+    expect(pool.status).toBe(201);
+    const poolBase = `/markets/${pool.body.id}`;
+    const poolMarket = (await e.alice.get(poolBase)).body.market;
+    await e.alice.post(`${poolBase}/bets`, { outcomeId: poolMarket.outcomes[0].id, amount: 10 });
+    const bonus = await e.alice.post('/me/bonus');
+    expect(bonus.status).toBe(200);
+    const funded = 1000 + e.config.dailyBonus;
+    expect((await e.alice.get('/portfolio')).body.stats).toMatchObject({ funded, profit: 0, netWorth: funded });
+
+    e.clock.now += 86400000;
+    expect((await e.alice.post(`${e.base}/resolve`, { outcomeId: e.yes })).status).toBe(200);
+    expect((await e.alice.get('/portfolio')).body.stats).toMatchObject({
+      balance: funded - 8.4,
+      staked: 10,
+      profit: 1.6,
+      netWorth: funded + 1.6,
+    });
+    expect((await e.bob.get('/portfolio')).body.stats.profit).toBe(-1.6);
+    expect((await e.carol.get('/portfolio')).body.stats.profit).toBe(0);
+    // Refunding another market has no profit and does not count the settled exchange twice.
+    await e.alice.post(`${poolBase}/cancel`);
+    expect((await e.alice.get('/portfolio')).body.stats).toMatchObject({
+      balance: funded + 1.6,
+      staked: 0,
+      profit: 1.6,
+      netWorth: funded + 1.6,
+    });
+  });
+
+  it('forbids market cancellation through the API, automatic calls, and WeCom while retaining order cancellation', async () => {
     const e = await fixture();
     await e.alice.post(`${e.base}/split`, { quantity: 10 });
     await e.order(e.alice, e.yes, 'sell', 0.8, 10);
     await e.order(e.bob, e.yes, 'buy', 0.8, 10);
-    await e.alice.post(`${e.base}/cancel`);
-    expect(await e.balance()).toBe(1003); // sold Yes for 8 and retains 5 of No settlement
-    expect(await e.balance(e.bob)).toBe(997);
+    const pending = (await e.order(e.alice, e.no, 'buy', 0.2, 3)).body;
+    // Even a confirmation card issued under the former policy must not cancel the market.
+    const staleAction = createAction(e.db, 1, 'fake-cancel-user', { kind: 'cancel', marketId: e.id }, e.clock.now);
+    const snapshot = () =>
+      [
+        'users',
+        'ledger',
+        'exchange_positions',
+        'exchange_orders',
+        'exchange_trades',
+        'markets',
+        'outcomes',
+        'price_history',
+        'wecom_actions',
+      ].map((table) => e.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
+    const before = snapshot();
+    const result = await e.alice.post(`${e.base}/cancel`);
+    expect(result.status).toBe(403);
+    expect(result.body.error).toContain('Polymarket 市场不可取消');
+    expect(snapshot()).toEqual(before);
+    expect(() => cancelMarket(e.db, e.id, null, undefined, e.clock.now)).toThrow('Polymarket 市场不可取消');
+    expect(() => executeAction(e.db, staleAction, e.clock.now)).toThrow('Polymarket 市场不可取消');
+    const ctx: ToolContext = {
+      db: e.db,
+      config: e.config,
+      now: e.clock.now,
+      siteUrl: 'https://example.invalid',
+      userId: 1,
+      wecomUserId: 'fake-cancel-user',
+      card: null,
+    };
+    expect(runTool(ctx, 'cancel_market', { marketId: e.id })).toMatchObject({ isError: true });
+    expect(ctx.card).toBeNull();
+    expect(snapshot()).toEqual(before);
+    expect((await e.alice.get(e.base)).body.market.status).toBe('open');
+    expect((await e.state()).collateral).toBe(10);
+    expect((await e.alice.post(`${e.base}/orders/${pending.id}/cancel`)).status).toBe(200);
+    expect(await e.balance()).toBe(998);
+    expect(await e.balance(e.bob)).toBe(992);
+    e.clock.now += 86400000;
+    expect((await e.alice.post(`${e.base}/resolve`, { outcomeId: e.yes })).status).toBe(200);
     expect((await e.state()).collateral).toBe(0);
-    expect((await e.alice.post(`${e.base}/merge`, { quantity: 1 })).status).toBe(409);
+    expect(await e.balance(e.bob)).toBe(1002);
   });
 
   it('expires unmatched bids/asks at close and keeps collateral until resolution', async () => {
@@ -229,7 +445,7 @@ describe('Polymarket exchange', () => {
     expect((await e.alice.post(`${e.base}/bets`, { outcomeId: e.yes, amount: 10 })).status).toBe(400);
     expect((await e.order(e.alice, 9999, 'buy', 0.5, 10)).status).toBe(404);
     await e.order(e.alice, e.yes, 'buy', 0.6, 10);
-    await e.order(e.alice, e.no, 'buy', 0.5, 10);
+    expect((await e.order(e.alice, e.no, 'buy', 0.5, 10)).status).toBe(409);
     expect((await e.state()).trades).toEqual([]);
     expect((await e.state()).collateral).toBe(0);
     const invalid = await e.alice.post('/markets', {

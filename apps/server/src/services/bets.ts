@@ -216,7 +216,7 @@ export function resolveMarket(
   })();
 }
 
-/** The creator explicitly voids the market and refunds its assets. */
+/** Pool markets can be cancelled; Polymarket positions always wait for a result. */
 export function cancelMarket(
   db: DB,
   marketId: number,
@@ -226,17 +226,15 @@ export function cancelMarket(
 ): void {
   db.transaction(() => {
     const market = getMarketRow(db, marketId);
-    if (actorId === null) {
-      if (market.mode !== 'pool') throw forbidden('Polymarket 市场不可自动取消');
-    } else assertCreator(market, actorId);
+    if (actorId !== null) assertCreator(market, actorId);
+    if (market.mode === 'polymarket')
+      throw forbidden('Polymarket 市场不可取消，只能等待公布结果结算；未成交订单仍可撤销');
     assertUnsettled(market);
-    if (market.mode === 'polymarket') settleExchange(db, marketId, null, now);
-    else refundAll(db, marketId, '市场取消，全部退还', now);
+    refundAll(db, marketId, '市场取消，全部退还', now);
     db.prepare(
       `UPDATE markets SET status = 'cancelled', resolved_at = ?, resolution_note = ?,
               close_at = MIN(close_at, ?) WHERE id = ?`,
     ).run(now, note || null, now, marketId);
-    if (market.mode === 'polymarket') recordPriceSnapshot(db, marketId, [0.5, 0.5], now);
   })();
 }
 

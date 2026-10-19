@@ -292,7 +292,7 @@ export default function CreateMarket() {
             <Gavel className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
               {mode === 'polymarket'
-                ? '获胜份额每份兑回 1 水滴，取消时 Yes / No 每份兑回 0.50。'
+                ? '获胜份额每份兑回 1 水滴，落败份额兑回 0；Polymarket 市场不可取消。'
                 : '押中的人按比例瓜分奖池，取消时全额退款。'}
               结果由你在结算时间到达后公布。
               {mode === 'polymarket'

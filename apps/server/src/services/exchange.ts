@@ -106,17 +106,26 @@ function releaseOrder(db: DB, o: OrderRow, now: number) {
   db.prepare("UPDATE exchange_orders SET status = 'cancelled' WHERE id = ?").run(o.id);
 }
 
-// Both direct orders and complementary orders contribute executable liquidity.
-function levels(db: DB, marketId: number, outcomeId: number, side: 'buy' | 'sell'): BookLevel[] {
+// Mark prices include complementary liquidity; displayed books contain only actual orders.
+function levels(
+  db: DB,
+  marketId: number,
+  outcomeId: number,
+  side: 'buy' | 'sell',
+  includeComplement = true,
+): BookLevel[] {
   const rows = db
     .prepare(
       `SELECT CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END AS price, SUM(remaining) AS quantity
     FROM exchange_orders WHERE market_id = @market AND status = 'open' AND
-    ((outcome_id = @outcome AND side = @side) OR (outcome_id <> @outcome AND side <> @side))
+    ((outcome_id = @outcome AND side = @side) OR (@includeComplement AND outcome_id <> @outcome AND side <> @side))
     GROUP BY CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END
     ORDER BY price ${side === 'buy' ? 'DESC' : 'ASC'}`,
     )
-    .all({ market: marketId, outcome: outcomeId, side }) as { price: number; quantity: number }[];
+    .all({ market: marketId, outcome: outcomeId, side, includeComplement: Number(includeComplement) }) as {
+    price: number;
+    quantity: number;
+  }[];
   return rows.map((r) => ({ price: fromCents(r.price), quantity: r.quantity }));
 }
 
@@ -179,6 +188,20 @@ export function placeOrder(db: DB, userId: number, marketId: number, input: Orde
     exchangeMarket(db, marketId, now, userId);
     if (!getOutcomeRows(db, marketId).some((o) => o.id === input.outcomeId)) throw notFound('选项不存在');
     const price = Math.round(input.price * 100);
+    // Use the same crossing rules for self-trade prevention and ordinary matching.
+    const findCrossingOrder = (own: boolean) =>
+      db
+        .prepare(
+          `SELECT *, CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END AS effective_price
+        FROM exchange_orders WHERE market_id = @market AND status = 'open' AND user_id ${own ? '=' : '<>'} @user AND
+        ((outcome_id = @outcome AND side <> @side) OR (outcome_id <> @outcome AND side = @side))
+        AND (CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END) ${input.side === 'buy' ? '<=' : '>='} @price
+        ORDER BY effective_price ${input.side === 'buy' ? 'ASC' : 'DESC'}, id ASC LIMIT 1`,
+        )
+        .get({ market: marketId, user: userId, outcome: input.outcomeId, side: input.side, price }) as
+        OrderRow | undefined;
+    const ownOrder = findCrossingOrder(true);
+    if (ownOrder) throw conflict(`订单会与自己的挂单 #${ownOrder.id} 交叉，已拒绝；请先撤销旧单或调整价格`);
     if (input.side === 'buy') {
       adjustBalance(db, userId, price * -input.quantity, 'order_lock', now, { marketId });
     } else {
@@ -206,16 +229,7 @@ export function placeOrder(db: DB, userId: number, marketId: number, input: Orde
     );
     const incoming = db.prepare('SELECT * FROM exchange_orders WHERE id = ?').get(id) as OrderRow;
     while (incoming.remaining > 0) {
-      const maker = db
-        .prepare(
-          `SELECT *, CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END AS effective_price
-        FROM exchange_orders WHERE market_id = @market AND status = 'open' AND user_id <> @user AND
-        ((outcome_id = @outcome AND side <> @side) OR (outcome_id <> @outcome AND side = @side))
-        AND (CASE WHEN outcome_id = @outcome THEN price ELSE 100-price END) ${input.side === 'buy' ? '<=' : '>='} @price
-        ORDER BY effective_price ${input.side === 'buy' ? 'ASC' : 'DESC'}, id ASC LIMIT 1`,
-        )
-        .get({ market: marketId, user: userId, outcome: input.outcomeId, side: input.side, price }) as
-        OrderRow | undefined;
+      const maker = findCrossingOrder(false);
       if (!maker) break;
       // Reject before the first fill; the transaction rolls back reservations and insertion.
       // The ordinary candidate query also covers complementary liquidity and excludes self-trades.
@@ -275,14 +289,14 @@ export function expireExchangeOrders(db: DB, now: number) {
 }
 
 /** Caller wraps this together with the market status change in one transaction. */
-export function settleExchange(db: DB, marketId: number, winner: number | null, now: number) {
+export function settleExchange(db: DB, marketId: number, winner: number, now: number) {
   const orders = db
     .prepare("SELECT * FROM exchange_orders WHERE market_id = ? AND status = 'open'")
     .all(marketId) as OrderRow[];
   for (const o of orders) releaseOrder(db, o, now);
   const payouts = db
     .prepare(
-      `SELECT user_id, SUM(quantity * CASE WHEN @winner IS NULL THEN 50 WHEN outcome_id = @winner THEN 100 ELSE 0 END) AS amount
+      `SELECT user_id, SUM(quantity * CASE WHEN outcome_id = @winner THEN 100 ELSE 0 END) AS amount
     FROM exchange_positions WHERE market_id = @market GROUP BY user_id`,
     )
     .all({ winner, market: marketId }) as { user_id: number; amount: number }[];
@@ -291,14 +305,15 @@ export function settleExchange(db: DB, marketId: number, winner: number | null, 
     throw new Error('Exchange collateral invariant violated');
   for (const p of payouts)
     if (p.amount)
-      adjustBalance(db, p.user_id, p.amount, winner === null ? 'refund' : 'payout', now, {
+      adjustBalance(db, p.user_id, p.amount, 'payout', now, {
         marketId,
-        note: winner === null ? '市场取消，每份 Yes / No 兑回 0.50' : '获胜份额每份兑回 1',
+        note: '获胜份额每份兑回 1',
       });
   db.prepare('UPDATE markets SET pot = 0 WHERE id = ?').run(marketId);
-  db.prepare(
-    'UPDATE outcomes SET mark_price = CASE WHEN ? IS NULL THEN 50 WHEN id = ? THEN 100 ELSE 0 END WHERE market_id = ?',
-  ).run(winner, winner, marketId);
+  db.prepare('UPDATE outcomes SET mark_price = CASE WHEN id = ? THEN 100 ELSE 0 END WHERE market_id = ?').run(
+    winner,
+    marketId,
+  );
 }
 
 export function exchangeState(db: DB, marketId: number, userId?: number): ExchangeState {
@@ -318,8 +333,8 @@ export function exchangeState(db: DB, marketId: number, userId?: number): Exchan
     collateral: fromCents(m.pot),
     books: outcomes.map((o) => ({
       outcomeId: o.id,
-      bids: levels(db, marketId, o.id, 'buy'),
-      asks: levels(db, marketId, o.id, 'sell'),
+      bids: levels(db, marketId, o.id, 'buy', false),
+      asks: levels(db, marketId, o.id, 'sell', false),
       lastPrice: o.last_price === null ? null : fromCents(o.last_price),
     })),
     positions: userId

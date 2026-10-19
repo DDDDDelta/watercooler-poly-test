@@ -6,6 +6,7 @@ import { outcomeColor } from '../lib/colors';
 import { formatPct, formatRelative } from '../lib/format';
 import { CategoryIcon } from './CategoryIcon';
 import { Money } from './Money';
+import { OutcomeQuote } from './OutcomeQuote';
 import { ProbabilityRing } from './ProbabilityRing';
 import { Sparkline } from './Sparkline';
 import { StatusBadge } from './StatusBadge';
@@ -26,7 +27,7 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
         <h3 className="line-clamp-2 min-h-[2.75rem] flex-1 text-[15px] leading-snug font-semibold text-fg transition-colors group-hover:text-brand">
           {market.question}
         </h3>
-        {market.isBinary && market.outcomes[0] && (
+        {market.mode === 'pool' && market.isBinary && market.outcomes[0] && (
           <ProbabilityRing
             value={market.outcomes[0].probability}
             size={56}
@@ -36,8 +37,24 @@ export function MarketCard({ market, preview }: { market: MarketSummary; preview
       </div>
 
       <div className="mt-3 flex flex-1 flex-col justify-end">
-        {market.mode === 'polymarket' && <span className="mb-2 text-xs text-brand">Polymarket · 订单簿</span>}
-        {market.isBinary ? (
+        {market.mode === 'polymarket' ? (
+          <>
+            <span className="mb-2 text-xs text-faint">挂单价 · 水滴/份</span>
+            <div className="grid grid-cols-2 gap-2">
+              {market.outcomes.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  disabled={!live || preview}
+                  onClick={() => navigate(`${href}?outcome=${o.id}`)}
+                  className="relative z-10 rounded bg-raised p-3 text-sm transition-colors hover:bg-fill disabled:pointer-events-none"
+                >
+                  <OutcomeQuote outcome={o} />
+                </button>
+              ))}
+            </div>
+          </>
+        ) : market.isBinary ? (
           <>
             {market.spark.length > 1 ? (
               <div className="relative mb-3">

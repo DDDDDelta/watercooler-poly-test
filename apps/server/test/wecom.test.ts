@@ -361,6 +361,85 @@ describe('WeCom bot', () => {
     expect(fake.sent).toHaveLength(count + 2);
   });
 
+  it('uses share holders and fixed redemption rules on Polymarket resolution cards', async () => {
+    const { env, fake, model, bind } = wecomEnv();
+    const alice = await bind('alice', 'zhangsan');
+    const bob = await env.register('bob');
+    const carol = await env.register('carol');
+    const created = await alice.post('/markets', {
+      question: '份额市场确认卡片是否正确？',
+      category: '生活',
+      mode: 'polymarket',
+      closeAt: env.clock.now + DAY,
+      outcomes: ['Yes', 'No'],
+    });
+    expect(created.status).toBe(201);
+    const base = `/markets/${created.body.id}`;
+    const yes = (await alice.get(base)).body.market.outcomes[0].id;
+    const order = (client: typeof alice, side: 'buy' | 'sell', price: number, quantity: number) =>
+      client.post(`${base}/orders`, { outcomeId: yes, side, price, quantity });
+    await alice.post(`${base}/split`, { quantity: 10 });
+    await order(alice, 'sell', 0.6, 4);
+    await order(bob, 'buy', 0.6, 4);
+    await order(bob, 'sell', 0.7, 1);
+    await order(carol, 'buy', 0.7, 1);
+    await order(carol, 'sell', 0.7, 1);
+    await order(bob, 'buy', 0.7, 1);
+    // The zero-quantity row left by Carol's sale must not be counted as a winner.
+    expect(
+      env.db.prepare('SELECT quantity FROM exchange_positions WHERE user_id = 3 AND outcome_id = ?').get(yes),
+    ).toEqual({ quantity: 0 });
+    env.clock.now += DAY;
+    model.script(callTool('resolve_market', { marketId: created.body.id, outcome: 'Yes' }), answer('请确认结果'));
+    const resolving = await fake.message('zhangsan', '@小助手 结果是 Yes');
+    expect(resolving.card!.horizontal_content_list).toEqual([
+      { keyname: '结果', value: 'Yes' },
+      { keyname: '抵押资金', value: '10 水滴' },
+      { keyname: '获胜持有人', value: '2' },
+      { keyname: '兑付规则', value: '获胜每份兑回 1 水滴，落败每份兑回 0' },
+    ]);
+    expect(JSON.stringify(resolving.card)).not.toContain('全部退还');
+    expect((await alice.get(base)).body.market.status).toBe('closed');
+    expect((await alice.get('/auth/me')).body.user.balance).toBe(992.4);
+    expect((await fake.click('zhangsan', resolving.card!))[0]!.card.main_title!.title).toBe('✅ 已公布结果并结算');
+    expect((await alice.get('/auth/me')).body.user.balance).toBe(998.4);
+    expect((await bob.get('/auth/me')).body.user.balance).toBe(1001.6);
+    expect((await carol.get('/auth/me')).body.user.balance).toBe(1000);
+
+    // An empty exchange has zero winning holders, and still never promises a pool-style refund.
+    const empty = await alice.post('/markets', {
+      question: '没有份额的市场确认卡片？',
+      category: '生活',
+      mode: 'polymarket',
+      closeAt: env.clock.now + DAY,
+      outcomes: ['Yes', 'No'],
+    });
+    env.clock.now += DAY;
+    model.script(callTool('resolve_market', { marketId: empty.body.id, outcome: 'No' }), answer('请确认结果'));
+    const emptyCard = (await fake.message('zhangsan', '@小助手 空市场结果是 No')).card!;
+    expect(emptyCard.horizontal_content_list).toContainEqual({ keyname: '获胜持有人', value: '0' });
+    expect(JSON.stringify(emptyCard)).not.toContain('全部退还');
+
+    // Pool mode retains the full-refund rule when nobody backed the winning outcome.
+    const pool = await alice.post('/markets', {
+      question: '没人押中的奖池仍然全额退还？',
+      category: '生活',
+      closeAt: env.clock.now + DAY,
+      outcomes: ['是', '否'],
+    });
+    expect(pool.status).toBe(201);
+    const poolBase = `/markets/${pool.body.id}`;
+    const poolMarket = (await alice.get(poolBase)).body.market;
+    await bob.post(`${poolBase}/bets`, { outcomeId: poolMarket.outcomes[1].id, amount: 10 });
+    env.clock.now += DAY;
+    model.script(callTool('resolve_market', { marketId: pool.body.id, outcome: '是' }), answer('请确认结果'));
+    const poolCard = (await fake.message('zhangsan', '@小助手 奖池结果是 是')).card!;
+    expect(poolCard.horizontal_content_list).toContainEqual({ keyname: '押中人数', value: '没人押中，全部退还' });
+    expect(JSON.stringify(poolCard)).not.toContain('兑付规则');
+    expect((await fake.click('zhangsan', poolCard))[0]!.card.main_title!.title).toBe('✅ 已公布结果并结算');
+    expect((await bob.get('/auth/me')).body.user.balance).toBe(1001.6);
+  });
+
   it('reminds at settlement time and only warns pool markets about automatic refunds', async () => {
     const { env, fake, bind, notices } = wecomEnv();
     const alice = await bind('alice', 'zhangsan');

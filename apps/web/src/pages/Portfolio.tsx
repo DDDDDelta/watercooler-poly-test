@@ -92,21 +92,25 @@ export default function PortfolioPage() {
     <div>
       <h1 className="section-title">我的下注</h1>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="总资产">
+        <Stat label="入账净值">
           <Money value={stats.netWorth} />
         </Stat>
         <Stat label="可用余额">
           <Money value={stats.balance} />
         </Stat>
-        <Stat label="下注 / 持仓 / 冻结资金">
+        <Stat label="未结算净投入">
           <Money value={stats.staked} />
         </Stat>
-        <Stat label="累计盈亏">
+        <Stat label="已结算盈亏">
           <span className={stats.profit >= 0 ? 'text-yes' : 'text-no'}>
             <Money value={stats.profit} signed />
           </span>
         </Stat>
       </div>
+      <p className="mt-3 text-xs text-faint">
+        入账净值 = 注册及签到奖励 +
+        已结算盈亏。未结算净投入含冻结资金，回款超过投入时可为负；交易盈亏等市场最终结算后计入排名。
+      </p>
       {data.exchangeOrders.length > 0 && (
         <Card className="mt-6 p-5">
           <h2 className="font-semibold">Polymarket 未成交订单</h2>

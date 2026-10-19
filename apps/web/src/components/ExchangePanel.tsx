@@ -1,34 +1,43 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { orderSchema, shareAmountSchema, type BookLevel, type MarketDetail } from '@watercooler/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  orderSchema,
+  shareAmountSchema,
+  type ExchangeState,
+  type MarketDetail,
+  type OrderInput,
+} from '@watercooler/shared';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
-import { formatDate, formatMoney } from '../lib/format';
+import { formatMoney } from '../lib/format';
 import { Button, Card, Field, Input, Segmented, Spinner } from './ui';
 
 export function ExchangePanel({
   market,
+  data,
+  error,
   outcomeId,
-  onOutcomeChange,
+  side,
+  onSideChange,
+  price,
+  onPriceChange,
 }: {
   market: MarketDetail;
+  data: ExchangeState | undefined;
+  error: Error | null;
   outcomeId: number;
-  onOutcomeChange: (id: number) => void;
+  side: OrderInput['side'];
+  onSideChange: (side: OrderInput['side']) => void;
+  price: string;
+  onPriceChange: (price: string) => void;
 }) {
   const { me } = useMe();
   const qc = useQueryClient();
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
-  const [price, setPrice] = useState('0.50');
   const [quantity, setQuantity] = useState('10');
   const [postOnly, setPostOnly] = useState(false);
   const [pairs, setPairs] = useState('10');
-  const { data, error } = useQuery({
-    queryKey: ['exchange', market.id, me?.id],
-    queryFn: () => api.exchange(market.id),
-    refetchInterval: 3000,
-  });
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => {
@@ -52,7 +61,6 @@ export function ExchangePanel({
         <Spinner />
       </Card>
     );
-  const book = data.books.find((b) => b.outcomeId === outcomeId)!;
   const holding = data.positions.find((p) => p.outcomeId === outcomeId);
   const input = { outcomeId, side, price: Number(price), quantity: Number(quantity), postOnly };
   const valid = orderSchema.safeParse(input).success;
@@ -69,52 +77,10 @@ export function ExchangePanel({
   const balance = me?.balance ?? 0;
   const label = market.outcomes.find((o) => o.id === outcomeId)!.label;
 
-  const levelColumn = (title: string, rows: BookLevel[], isAsk: boolean) => (
-    <div>
-      <h3 className={isAsk ? 'mb-2 text-sm text-no' : 'mb-2 text-sm text-yes'}>{title}</h3>
-      <div className="mb-1 flex justify-between text-xs text-faint">
-        <span>价格</span>
-        <span>份数</span>
-      </div>
-      {rows.slice(0, 8).map((r) => (
-        <button
-          key={r.price}
-          type="button"
-          disabled={!open}
-          onClick={() => {
-            setSide(isAsk ? 'buy' : 'sell');
-            setPrice(r.price.toFixed(2));
-          }}
-          className="flex w-full justify-between rounded px-1 py-1 font-mono text-sm hover:bg-fill"
-        >
-          <span className={isAsk ? 'text-no' : 'text-yes'}>{r.price.toFixed(2)}</span>
-          <span>{r.quantity}</span>
-        </button>
-      ))}
-      {rows.length === 0 && <p className="py-3 text-xs text-faint">暂无挂单</p>}
-    </div>
-  );
-
   return (
     <>
       <Card className="space-y-4 p-5">
-        <div>
-          <h2 className="font-semibold">Polymarket · 份额交易</h2>
-          <p className="mt-1 text-xs text-faint">抵押资金 {formatMoney(data.collateral)} 水滴 · 获胜每份兑回 1</p>
-        </div>
-        <Segmented
-          value={String(outcomeId)}
-          onChange={(id) => onOutcomeChange(Number(id))}
-          options={market.outcomes.map((o) => ({ value: String(o.id), label: o.label }))}
-        />
-        <div className="grid grid-cols-2 gap-5 rounded bg-raised p-3">
-          {levelColumn('Bid · 买单', book.bids, false)}
-          {levelColumn('Ask · 卖单', book.asks, true)}
-        </div>
-        <p className="text-xs text-faint">
-          最新成交：{book.lastPrice === null ? '暂无' : book.lastPrice.toFixed(2)}
-          。盘口包含互补订单，点击价格可填单；自己的订单不会与自己成交。
-        </p>
+        <h2 className="font-semibold">下单 · {label}</h2>
         {me && (
           <section className="border-t border-line pt-4">
             <h3 className="mb-2 font-semibold">
@@ -165,7 +131,7 @@ export function ExchangePanel({
             >
               <Segmented
                 value={side}
-                onChange={setSide}
+                onChange={onSideChange}
                 options={[
                   { value: 'buy', label: '买入' },
                   { value: 'sell', label: '卖出' },
@@ -179,7 +145,7 @@ export function ExchangePanel({
                     max="0.99"
                     step="0.01"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    onChange={(e) => onPriceChange(e.target.value)}
                     required
                   />
                 </Field>
@@ -302,25 +268,6 @@ export function ExchangePanel({
           )}
         </Card>
       )}
-      <Card className="p-5">
-        <h2 className="mb-3 font-semibold">最近成交</h2>
-        <ul className="max-h-64 divide-y divide-line overflow-y-auto">
-          {data.trades.map((t) => (
-            <li key={t.id} className="py-2 text-xs">
-              <div className="flex justify-between">
-                <span>
-                  {market.outcomes.find((o) => o.id === t.outcomeId)?.label} · {t.quantity} 份 @ {t.price.toFixed(2)}
-                </span>
-                <span className="text-faint">
-                  {t.kind === 'mint' ? '互补铸造' : t.kind === 'merge' ? '互补合并' : '份额转手'}
-                </span>
-              </div>
-              <div className="mt-1 text-faint">{formatDate(t.createdAt)}</div>
-            </li>
-          ))}
-        </ul>
-        {!data.trades.length && <p className="text-xs text-faint">暂无成交。先挂买单，或抵押生成一对份额后挂卖单。</p>}
-      </Card>
     </>
   );
 }

@@ -9,6 +9,7 @@ import { migrations } from '../src/db/migrations';
 describe('upstream and Polymarket database upgrades', () => {
   const cases = [
     ...[2, 3, 4].map((version) => ({ lineage: 'upstream', version, sql: migrations.slice(0, version) })),
+    { lineage: 'polymarket', version: 7, sql: migrations.slice(0, 7) },
     ...[3, 4, 5, 6].map((version) => ({
       lineage: 'fork',
       version,
@@ -45,10 +46,11 @@ describe('upstream and Polymarket database upgrades', () => {
       db = openDatabase(path);
       expect(db.pragma('user_version', { simple: true })).toBe(migrations.length);
       expect(db.prepare('SELECT balance,is_bot FROM users').get()).toEqual({ balance: 90000, is_bot: 0 });
-      expect(db.prepare('SELECT mode,is_ai,pot,settle_at FROM markets WHERE id = 1').get()).toEqual({
+      expect(db.prepare('SELECT mode,is_ai,pot,close_at,settle_at FROM markets WHERE id = 1').get()).toEqual({
         mode: 'pool',
         is_ai: 0,
         pot: 10000,
+        close_at: 100,
         settle_at: lineage === 'fork' && version === 6 ? 150 : 100,
       });
       expect(db.prepare('SELECT kind,amount FROM ledger').get()).toEqual({ kind: 'bet', amount: -10000 });

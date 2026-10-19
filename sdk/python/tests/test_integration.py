@@ -70,6 +70,11 @@ class TradingIntegrationTests(unittest.TestCase):
             yes, no = [o["id"] for o in market["outcomes"]]
             seller.split(market_id, 20)
             ask = seller.place_order(market_id, yes, "sell", ".60", 10, client_order_id="ask-1")
+            with self.assertRaises(APIError) as self_cross:
+                seller.place_order(market_id, yes, "buy", ".60", 1, client_order_id="self-rejected")
+            self.assertEqual(self_cross.exception.status, 409)
+            self.assertIsNone(seller.order_by_client_id("self-rejected"))
+            self.assertEqual(seller.me()["balance"], 980)
             with self.assertRaises(APIError) as crossing:
                 buyer.place_order(market_id, yes, "buy", ".70", 4, post_only=True, client_order_id="post-rejected")
             self.assertEqual(crossing.exception.status, 409)
@@ -79,6 +84,10 @@ class TradingIntegrationTests(unittest.TestCase):
             bought = buyer.place_order(market_id, yes, "buy", ".70", 4, client_order_id="buy-1")
             self.assertEqual(bought["status"], "filled")
             self.assertEqual(buyer.me()["balance"], Decimal("997.60"))
+            stats = buyer.account()["stats"]
+            self.assertEqual(stats["profit"], 0)
+            self.assertEqual(stats["netWorth"], 1000)
+            self.assertEqual(stats["staked"], Decimal("2.40"))
             self.assertEqual(buyer.place_order(market_id, yes, "buy", ".70", 4, client_order_id="buy-1")["id"], bought["id"])
             self.assertEqual(buyer.order_by_client_id("buy-1")["id"], bought["id"])
             self.assertIsNone(buyer.order_by_client_id("missing"))
@@ -119,8 +128,14 @@ class TradingIntegrationTests(unittest.TestCase):
             self.assertEqual(seller.account()["user"]["balance"] + buyer.account()["user"]["balance"], 2000)
             second = seller.create_market("SDK 验证：取消另一个市场？", advanced + 86400000)["id"]
             seller.split(second, 2)
-            seller.cancel_market(second)
-            self.assertEqual(seller.market(second)["market"]["status"], "cancelled")
+            with self.assertRaises(APIError) as cancellation:
+                seller.cancel_market(second)
+            self.assertEqual(cancellation.exception.status, 403)
+            self.assertEqual(seller.market(second)["market"]["status"], "open")
+            self.assertEqual(seller.book(second)["collateral"], 2)
+            pool = seller.create_market("SDK 验证：仍可取消奖池市场？", advanced + 86400000, mode="pool")["id"]
+            seller.cancel_market(pool)
+            self.assertEqual(seller.market(pool)["market"]["status"], "cancelled")
 
 
 if __name__ == "__main__":

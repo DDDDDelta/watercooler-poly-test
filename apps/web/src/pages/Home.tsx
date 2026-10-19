@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { MarketCard, MarketCardSkeleton } from '../components/MarketCard';
 import { Money } from '../components/Money';
+import { OutcomeQuote } from '../components/OutcomeQuote';
 import { buttonClass, Card, Empty, Segmented } from '../components/ui';
 import { api, type MarketFilter, type MarketSort } from '../lib/api';
 import { useConfig, useMe } from '../lib/auth';
@@ -30,6 +31,7 @@ function FeaturedMarket({ market }: { market: MarketSummary }) {
   const { data: history } = useQuery({
     queryKey: ['history', market.id, 'all'],
     queryFn: () => api.history(market.id, 'all'),
+    enabled: market.mode === 'pool',
   });
   const lead = market.isBinary
     ? market.outcomes[0]!
@@ -46,48 +48,64 @@ function FeaturedMarket({ market }: { market: MarketSummary }) {
           {market.question}
         </h2>
       </Link>
-      <div className="mt-4 flex items-end gap-3">
-        <span className="font-mono text-4xl font-bold text-brand">{formatPct(lead.probability)}</span>
-        <span className="pb-1 text-sm text-dim">
-          {market.mode === 'polymarket' ? `${lead.label} 隐含概率` : `押「${lead.label}」占比`}
-        </span>
-        {lead.change24h !== null && Math.abs(lead.change24h) >= 0.005 && (
-          <span className={clsx('pb-1 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
-            {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 0)}%
-          </span>
-        )}
-      </div>
-      <div className="mt-2 h-40 min-h-40 flex-1">
-        {history && (
-          <Suspense fallback={null}>
-            <PriceChart market={market} points={history} />
-          </Suspense>
-        )}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {(market.isBinary
-          ? market.outcomes
-          : market.outcomes
-              .slice()
-              .sort((a, b) => b.probability - a.probability)
-              .slice(0, 3)
-        ).map((o) => {
-          const c = outcomeColor(o.index, market.isBinary);
-          return (
-            <button
-              key={o.id}
-              onClick={() => navigate(`/market/${market.id}?outcome=${o.id}`)}
-              className="flex flex-1 items-center justify-between gap-3 rounded px-4 py-2.5 text-sm font-semibold transition hover:brightness-95"
-              style={{ background: `${c}14`, color: c }}
-            >
-              <span className="truncate">
-                {market.mode === 'polymarket' ? '交易' : '押'} {o.label}
+      {market.mode === 'polymarket' ? (
+        <div className="mt-5 flex-1">
+          <p className="text-xs text-faint">挂单价 · 水滴/份</p>
+          <div className="mt-3 grid gap-3">
+            {market.outcomes.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => navigate(`/market/${market.id}?outcome=${o.id}`)}
+                className="rounded bg-raised p-4 transition-colors hover:bg-fill"
+              >
+                <OutcomeQuote outcome={o} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 flex items-end gap-3">
+            <span className="font-mono text-4xl font-bold text-brand">{formatPct(lead.probability)}</span>
+            <span className="pb-1 text-sm text-dim">押「{lead.label}」占比</span>
+            {lead.change24h !== null && Math.abs(lead.change24h) >= 0.005 && (
+              <span className={clsx('pb-1 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
+                {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 0)}%
               </span>
-              <span className="font-mono text-xs">{formatPct(o.probability)}</span>
-            </button>
-          );
-        })}
-      </div>
+            )}
+          </div>
+          <div className="mt-2 h-40 min-h-40 flex-1">
+            {history && (
+              <Suspense fallback={null}>
+                <PriceChart market={market} points={history} />
+              </Suspense>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(market.isBinary
+              ? market.outcomes
+              : market.outcomes
+                  .slice()
+                  .sort((a, b) => b.probability - a.probability)
+                  .slice(0, 3)
+            ).map((o) => {
+              const c = outcomeColor(o.index, market.isBinary);
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => navigate(`/market/${market.id}?outcome=${o.id}`)}
+                  className="flex flex-1 items-center justify-between gap-3 rounded px-4 py-2.5 text-sm font-semibold transition hover:brightness-95"
+                  style={{ background: `${c}14`, color: c }}
+                >
+                  <span className="truncate">押 {o.label}</span>
+                  <span className="font-mono text-xs">{formatPct(o.probability)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
       <div className="mt-4 flex items-center gap-3 text-xs text-faint">
         {market.mode === 'polymarket' ? '抵押' : '奖池'} <Money value={market.pot} compact className="text-dim" />
         <span>·</span>
@@ -364,6 +382,7 @@ function CommunitySection() {
               完整排行榜 <ChevronRight className="size-4" />
             </Link>
           </div>
+          <p className="mt-2 text-xs text-faint">按已结算盈利排名，未结算交易暂不计入。</p>
           <ol className="mt-4 space-y-1">
             {board?.slice(0, 6).map((e) => (
               <li key={e.user.id}>

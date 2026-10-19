@@ -46,10 +46,10 @@ export default function Profile() {
       </Card>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="总资产">
+        <Stat label="入账净值">
           <Money value={stats.netWorth} />
         </Stat>
-        <Stat label="累计盈亏">
+        <Stat label="已结算盈亏">
           <span className={stats.profit >= 0 ? 'text-yes' : 'text-no'}>
             <Money value={stats.profit} signed />
           </span>
@@ -57,6 +57,7 @@ export default function Profile() {
         <Stat label="下注次数">{stats.betCount}</Stat>
         <Stat label="参与市场">{stats.marketsBet}</Stat>
       </div>
+      <p className="mt-3 text-xs text-faint">净值和排名只计入已结算市场的盈亏，未结算交易暂不计入。</p>
 
       <Card className="mt-6 p-5">
         <Segmented

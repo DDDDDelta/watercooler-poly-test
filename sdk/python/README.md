@@ -72,11 +72,11 @@ client.merge(market_id, quantity=3)   # 消耗各 3 份未冻结的 Yes/No，取
 | `trades(market_id=..., limit=50, before=...)`                                            | 本人的成交，价格按自己的 Yes/No 方向返回                  |
 | `market_trades(market_id, limit=50, before=...)`                                         | 市场公开成交记录                                          |
 | `split(market_id, quantity)` / `merge(market_id, quantity)`                              | 抵押生成/合并赎回完整份额                                 |
-| `resolve_market(market_id, outcome_id, note=...)` / `cancel_market(market_id, note=...)` | 创建者结算/取消市场                                       |
+| `resolve_market(market_id, outcome_id, note=...)` / `cancel_market(market_id, note=...)` | 创建者结算；取消仅限奖池市场                              |
 
 返回普通字典/列表，沿用 API 的 camelCase 字段；JSON 小数解析为 `Decimal`，整数仍为 `int`。价格输入可用字符串、`Decimal` 或浮点数，必须精确到 0.01；数量为 1–1,000,000 的整数。
 
-`settle_at` 不得早于 `close_at`，省略时等于 `close_at`。停止交易后未成交订单解冻；到结算时间后才可调用 `resolve_market` 公布结果并兑付，提前调用返回 409。Polymarket 未公布时保留持仓和资金，一直等待结算，不会超时取消；奖池模式则在结算时间后 7 天未公布时自动退款；创建者主动取消市场仍可使用 `cancel_market`。
+`settle_at` 不得早于 `close_at`，省略时等于 `close_at`。停止交易后未成交订单解冻；到结算时间后才可调用 `resolve_market` 公布结果并兑付，提前调用返回 409。Polymarket 市场不可取消，未公布时保留持仓和资金一直等待结算；`cancel_market` 返回 403，但 `cancel_order` 仍可撤销未成交订单。奖池模式在结算时间后 7 天未公布时自动退款，创建者也可使用 `cancel_market` 主动取消。
 
 分页返回 `{items, nextCursor}`，按 ID 倒序，`nextCursor=None` 表示结束。把上一页的 `nextCursor` 作为下一页的 `before`，不要在翻页期间改变过滤条件。
 

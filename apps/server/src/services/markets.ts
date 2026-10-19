@@ -103,9 +103,14 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const outcomeRows = db
-    .prepare(`SELECT * FROM outcomes WHERE market_id IN (${placeholders(ids)}) ORDER BY market_id, idx`)
-    .all(...ids) as OutcomeRow[];
-  const byMarket = new Map<number, OutcomeRow[]>();
+    .prepare(
+      `SELECT o.*,
+        (SELECT MAX(price) FROM exchange_orders WHERE market_id = o.market_id AND outcome_id = o.id AND status = 'open' AND side = 'buy') AS best_bid,
+        (SELECT MIN(price) FROM exchange_orders WHERE market_id = o.market_id AND outcome_id = o.id AND status = 'open' AND side = 'sell') AS best_ask
+      FROM outcomes o WHERE market_id IN (${placeholders(ids)}) ORDER BY market_id, idx`,
+    )
+    .all(...ids) as (OutcomeRow & { best_bid: number | null; best_ask: number | null })[];
+  const byMarket = new Map<number, (typeof outcomeRows)[number][]>();
   for (const o of outcomeRows) {
     const list = byMarket.get(o.market_id) ?? [];
     list.push(o);
@@ -127,6 +132,12 @@ function hydrate(db: DB, rows: MarketListRow[], now: number): MarketSummary[] {
       pool: fromCents(o.pool),
       probability: probs[i] ?? 0,
       change24h: before?.[i] !== undefined && r.status === 'open' ? (probs[i] ?? 0) - before[i]! : null,
+      ...(r.mode === 'polymarket'
+        ? {
+            bestBid: isBettable(r, now) && o.best_bid !== null ? fromCents(o.best_bid) : null,
+            bestAsk: isBettable(r, now) && o.best_ask !== null ? fromCents(o.best_ask) : null,
+          }
+        : {}),
     }));
     return {
       mode: r.mode,

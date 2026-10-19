@@ -105,6 +105,8 @@ it.each(['pool', 'polymarket'] as const)(
         const exchange = (await trader.get(`/markets/${delayed}/exchange`)).body;
         expect(exchange.collateral).toBe(10);
         expect(exchange.positions.map((p: { quantity: number }) => p.quantity)).toEqual([10, 10]);
+        expect((await creator.post(`/markets/${delayed}/cancel`)).status).toBe(403);
+        expect((await trader.get(`/markets/${delayed}/exchange`)).body.collateral).toBe(10);
       }
       expect((await creator.post(`/markets/${delayed}/resolve`, { outcomeId: delayedYes })).status).toBe(200);
       expect((await trader.get('/auth/me')).body.user.balance).toBe(1000);

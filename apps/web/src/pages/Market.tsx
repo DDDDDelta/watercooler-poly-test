@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Avatar } from '../components/Avatar';
 import { BetPanel } from '../components/BetPanel';
 import { ExchangePanel } from '../components/ExchangePanel';
+import { ExchangeBook } from '../components/ExchangeBook';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { Money } from '../components/Money';
 import { StatusBadge } from '../components/StatusBadge';
@@ -35,9 +36,7 @@ function ChartCard({ market }: { market: MarketDetail }) {
         {market.isBinary ? (
           <div className="flex items-end gap-3">
             <span className="font-mono text-5xl font-bold text-brand">{formatPct(lead.probability)}</span>
-            <span className="pb-2 text-sm text-dim">
-              {market.mode === 'polymarket' ? `${lead.label} 市场隐含概率` : `押「${lead.label}」占比`}
-            </span>
+            <span className="pb-2 text-sm text-dim">押「{lead.label}」占比</span>
             {lead.change24h !== null && Math.abs(lead.change24h) >= 0.001 && (
               <span className={clsx('pb-2 font-mono text-sm', lead.change24h > 0 ? 'text-yes' : 'text-no')}>
                 {lead.change24h > 0 ? '▲' : '▼'} {formatSigned(lead.change24h * 100, 1)}% 24h
@@ -420,7 +419,7 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
       <p className="mt-1.5 text-xs leading-relaxed text-faint">
         {market.mode === 'polymarket' ? (
           <>
-            结算时间到达后由你公布结果，获胜份额每份兑回 1 水滴。取消市场时，每份 Yes / No 各兑回 0.50 水滴。
+            结算时间到达后由你公布结果，获胜份额每份兑回 1 水滴。Polymarket 市场不可取消。
             停止交易时未成交订单会撤销并解冻；未公布结果时保留持仓和抵押资金，继续等待结算。操作不可撤销。
           </>
         ) : (
@@ -435,9 +434,11 @@ function CreatorPanel({ market }: { market: MarketDetail }) {
         <Button size="sm" className="flex-1" disabled={!canResolve} onClick={() => setMode('resolve')}>
           公布结果
         </Button>
-        <Button size="sm" variant="danger" className="flex-1" onClick={() => setMode('cancel')}>
-          取消市场
-        </Button>
+        {market.mode === 'pool' && (
+          <Button size="sm" variant="danger" className="flex-1" onClick={() => setMode('cancel')}>
+            取消市场
+          </Button>
+        )}
       </div>
       <Modal open={mode !== null} onClose={() => setMode(null)} title={mode === 'resolve' ? '公布结果' : '取消市场'}>
         {mode === 'resolve' && (
@@ -491,6 +492,19 @@ export default function Market() {
     refetchInterval: 10_000,
   });
   const [outcomeId, setOutcomeId] = useState<number | null>(null);
+  const [side, setSide] = useState<'buy' | 'sell'>('buy');
+  const [price, setPrice] = useState('0.50');
+  const exchange = useQuery({
+    queryKey: ['exchange', id, me?.id],
+    queryFn: () => api.exchange(id),
+    enabled: data?.market.mode === 'polymarket',
+    refetchInterval: 3000,
+  });
+
+  useEffect(() => {
+    setSide('buy');
+    setPrice('0.50');
+  }, [id]);
 
   useEffect(() => {
     const fromUrl = Number(params.get('outcome'));
@@ -502,11 +516,14 @@ export default function Market() {
   const { market, stakes } = data;
   const selected = outcomeId && market.outcomes.some((o) => o.id === outcomeId) ? outcomeId : market.outcomes[0]!.id;
 
-  const selectOutcome = (oid: number) => {
-    setOutcomeId(oid);
-    setParams((p) => (p.set('outcome', String(oid)), p), { replace: true, preventScrollReset: true });
+  const focusTrade = () => {
     if (window.innerWidth < 1024)
       document.getElementById('trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const selectOutcome = (oid: number, scrollToTrade = true) => {
+    setOutcomeId(oid);
+    setParams((p) => (p.set('outcome', String(oid)), p), { replace: true, preventScrollReset: true });
+    if (scrollToTrade) focusTrade();
   };
 
   return (
@@ -546,13 +563,38 @@ export default function Market() {
           </div>
         </header>
         <ResolutionBanner market={market} />
-        <ChartCard market={market} />
+        {market.mode === 'polymarket' ? (
+          <ExchangeBook
+            market={market}
+            data={exchange.data}
+            error={exchange.error}
+            outcomeId={selected}
+            onOutcomeChange={(oid) => selectOutcome(oid, false)}
+            onQuoteSelect={(nextSide, nextPrice) => {
+              setSide(nextSide);
+              setPrice(nextPrice);
+              focusTrade();
+            }}
+          />
+        ) : (
+          <ChartCard market={market} />
+        )}
         {!market.isBinary && <OutcomeTable market={market} selected={selected} onSelect={selectOutcome} />}
       </div>
 
       <aside id="trade" className="scroll-mt-20 space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:self-start">
         {market.mode === 'polymarket' ? (
-          <ExchangePanel key={market.id} market={market} outcomeId={selected} onOutcomeChange={selectOutcome} />
+          <ExchangePanel
+            key={market.id}
+            market={market}
+            data={exchange.data}
+            error={exchange.error}
+            outcomeId={selected}
+            side={side}
+            onSideChange={setSide}
+            price={price}
+            onPriceChange={setPrice}
+          />
         ) : (
           <>
             <BetPanel market={market} stakes={stakes} outcomeId={selected} onOutcomeChange={selectOutcome} />

@@ -30,38 +30,25 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
     });
   }
 
-  const staked = db
-    .prepare(
-      `SELECT b.user_id, SUM(b.amount) AS total FROM bets b JOIN markets m ON m.id = b.market_id
-        WHERE m.status = 'open' GROUP BY b.user_id`,
-    )
-    .all() as { user_id: number; total: number }[];
-  for (const r of staked) {
-    const s = stats.get(r.user_id);
-    if (s) s.staked = fromCents(r.total);
-  }
-
-  // Include both owned shares (including those reserved for asks) and cash locked in bids.
-  const exchangeAssets = db
-    .prepare(
-      `SELECT user_id, SUM(value) AS total FROM (
-    SELECT p.user_id, p.quantity * o.mark_price AS value FROM exchange_positions p
-      JOIN outcomes o ON o.id = p.outcome_id JOIN markets m ON m.id = p.market_id WHERE m.status = 'open'
-    UNION ALL SELECT user_id, price * remaining FROM exchange_orders WHERE status = 'open' AND side = 'buy'
-  ) GROUP BY user_id`,
-    )
-    .all() as { user_id: number; total: number }[];
-  for (const r of exchangeAssets) {
-    const s = stats.get(r.user_id);
-    if (s) s.staked += fromCents(r.total);
-  }
-
   const funded = db
     .prepare(`SELECT user_id, SUM(amount) AS total FROM ledger WHERE kind IN ('signup', 'bonus') GROUP BY user_id`)
     .all() as { user_id: number; total: number }[];
   for (const f of funded) {
     const s = stats.get(f.user_id);
     if (s) s.funded = fromCents(f.total);
+  }
+
+  // Recognize a market's complete cash flow only after resolution/cancellation.
+  // Quotes and even small wash trades must not revalue anyone's remaining inventory.
+  const settled = db
+    .prepare(
+      `SELECT l.user_id, SUM(l.amount) AS total FROM ledger l JOIN markets m ON m.id = l.market_id
+        WHERE m.status <> 'open' GROUP BY l.user_id`,
+    )
+    .all() as { user_id: number; total: number }[];
+  for (const r of settled) {
+    const s = stats.get(r.user_id);
+    if (s) s.profit = fromCents(r.total);
   }
 
   const activity = db
@@ -81,8 +68,10 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
   }
 
   for (const s of stats.values()) {
-    s.netWorth = round2(s.balance + s.staked);
-    s.profit = round2(s.netWorth - s.funded);
+    s.netWorth = round2(s.funded + s.profit);
+    // Net cash invested in unresolved markets, including order escrow. It may be
+    // negative when sales/merges have already returned more than the user paid in.
+    s.staked = round2(s.netWorth - s.balance);
   }
   return stats;
 }

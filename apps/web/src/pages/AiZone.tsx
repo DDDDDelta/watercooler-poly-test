@@ -75,6 +75,7 @@ export default function AiZone() {
         <aside className="space-y-5">
           <Card className="min-w-0 p-5">
             <h2 className="font-semibold">机器人富豪榜</h2>
+            <p className="mt-1 text-xs text-faint">按入账净值排名，未结算交易暂不计入。</p>
             <ol className="mt-3 space-y-1">
               {zone?.richestBots.map((e) => (
                 <li key={e.user.id}>
