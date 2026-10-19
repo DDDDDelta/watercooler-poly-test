@@ -34,6 +34,25 @@ export interface WecomTransport {
   close(): void;
 }
 
+/**
+ * Who clicked which button on which card. WeCom nests the click under `event.template_card_event`;
+ * the SDK's types and README put `event_key`/`task_id` on `event` itself, so accept both.
+ */
+export function parseCardClick(body: unknown): Omit<CardClick, 'update'> | null {
+  const b = body as
+    { from?: { userid?: string }; chattype?: string; chatid?: string; event?: Record<string, unknown> } | undefined;
+  const event = b?.event;
+  const click = (event?.template_card_event ?? event) as { event_key?: unknown; task_id?: unknown } | undefined;
+  const userId = b?.from?.userid;
+  if (!userId || typeof click?.event_key !== 'string' || typeof click.task_id !== 'string') return null;
+  return {
+    userId,
+    chatId: b.chattype === 'group' ? (b.chatid ?? null) : null,
+    key: click.event_key,
+    taskId: click.task_id,
+  };
+}
+
 /** Long connection to the WeCom smart bot (企业微信智能机器人) via the official SDK. */
 export function connectWecom(opts: { botId: string; secret: string }, log: (m: string) => void): WecomTransport {
   const client = new WSClient({
@@ -100,13 +119,13 @@ export function connectWecom(opts: { botId: string; secret: string }, log: (m: s
     },
     onCardClick(handler) {
       client.on('event.template_card_event', (frame) => {
-        const body = frame.body;
-        if (!body?.from?.userid || !body.event.event_key || !body.event.task_id) return;
+        const click = parseCardClick(frame.body);
+        if (!click) {
+          log(`ignored a card event without a button key: ${JSON.stringify(frame.body?.event).slice(0, 300)}`);
+          return;
+        }
         handler({
-          userId: body.from.userid,
-          chatId: body.chattype === 'group' ? (body.chatid ?? null) : null,
-          key: body.event.event_key,
-          taskId: body.event.task_id,
+          ...click,
           update: async (card, onlyFor) => {
             await client.updateTemplateCard(frame, card, onlyFor);
           },

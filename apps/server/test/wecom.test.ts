@@ -8,7 +8,13 @@ import { getUserById } from '../src/services/users';
 import { createBindToken } from '../src/wecom/bindings';
 import { startWecom, stripMentions, type WecomService, type WecomSettings } from '../src/wecom/bot';
 import { sendNotices } from '../src/wecom/notifier';
-import type { Card, CardClick, IncomingText, WecomTransport } from '../src/wecom/transport';
+import {
+  parseCardClick,
+  type Card,
+  type CardClick,
+  type IncomingText,
+  type WecomTransport,
+} from '../src/wecom/transport';
 import { setup } from './helpers';
 
 const MINUTE = 60_000;
@@ -542,6 +548,30 @@ describe('WeCom bot', () => {
 
     expect((await fake.message('zhangsan', '@小助手 解绑')).reply).toContain('已解除');
     expect((await fake.message('zhangsan', '@小助手 你好')).reply).toContain('/bind/');
+  });
+
+  it('reads card clicks the way WeCom sends them', () => {
+    const click = { userId: 'u1', chatId: 'g1', key: 'wc_ok_7', taskId: 'wc_x_1' };
+    const from = { from: { userid: 'u1' }, chattype: 'group', chatid: 'g1', msgtype: 'event' };
+    // What the WeCom server actually sends: the click is nested under template_card_event.
+    expect(
+      parseCardClick({
+        ...from,
+        event: {
+          eventtype: 'template_card_event',
+          template_card_event: { card_type: 'button_interaction', event_key: 'wc_ok_7', task_id: 'wc_x_1' },
+        },
+      }),
+    ).toEqual(click);
+    // The flat shape the SDK's types describe.
+    expect(
+      parseCardClick({ ...from, event: { eventtype: 'template_card_event', event_key: 'wc_ok_7', task_id: 'wc_x_1' } }),
+    ).toEqual(click);
+    expect(parseCardClick({ ...from, chattype: 'single', event: { event_key: 'k', task_id: 't' } })).toMatchObject({
+      chatId: null,
+    });
+    expect(parseCardClick({ ...from, event: { eventtype: 'template_card_event' } })).toBeNull();
+    expect(parseCardClick(undefined)).toBeNull();
   });
 
   it('reads the wecom section of bot.json and strips mentions', () => {
