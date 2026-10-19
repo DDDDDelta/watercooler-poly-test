@@ -13,6 +13,7 @@
     "start": "pnpm --filter @watercooler/server start",
     "seed": "pnpm --filter @watercooler/server seed",
     "test": "pnpm -r test",
+    "test:python": "python -m unittest discover -s sdk/python/tests -t sdk/python -v",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

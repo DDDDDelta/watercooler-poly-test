@@ -186,6 +186,7 @@ function UserMenu() {
 
 function Navbar() {
   const { me, loading } = useMe();
+  const creating = useLocation().pathname === '/create';
   const config = useConfig();
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-panel/95 backdrop-blur">
@@ -210,12 +211,14 @@ function Navbar() {
                 <Money value={me.balance} />
               </Link>
               {/* The wrapper does the hiding: `hidden` on the link itself would fight its `inline-flex`. */}
-              <div className="hidden sm:block">
-                <Link to="/create" className={buttonClass({ size: 'sm', pill: true })}>
-                  <Plus className="size-4" />
-                  创建市场
-                </Link>
-              </div>
+              {!creating && (
+                <div className="hidden sm:block">
+                  <Link to="/create" className={buttonClass({ size: 'sm', pill: true })}>
+                    <Plus className="size-4" />
+                    创建市场
+                  </Link>
+                </div>
+              )}
               <UserMenu />
             </>
           ) : (
@@ -276,7 +279,7 @@ function MobileNav() {
     { to: '/', icon: LayoutGrid, label: '市场' },
     // Five slots: the AI zone takes the leaderboard's (still linked from the home page and footer).
     config?.aiZone ? { to: '/ai', icon: Bot, label: 'AI 专区' } : { to: '/leaderboard', icon: Trophy, label: '排行' },
-    { to: me ? '/create' : '/login', icon: Plus, label: '创建', primary: true },
+    { to: '/create', icon: Plus, label: '创建', primary: true },
     { to: me ? '/portfolio' : '/login', icon: BarChart3, label: '下注' },
     { to: me ? `/u/${me.id}` : '/login', icon: UserIcon, label: '我的' },
   ];
@@ -287,6 +290,7 @@ function MobileNav() {
           <NavLink
             key={label}
             to={to}
+            aria-label={label}
             end={to === '/'}
             className={({ isActive }) =>
               clsx(
@@ -302,7 +306,7 @@ function MobileNav() {
             ) : (
               <Icon className="size-5" />
             )}
-            {!primary && label}
+            {label}
           </NavLink>
         ))}
       </div>
@@ -312,20 +316,22 @@ function MobileNav() {
 
 /** Floating buttons on the right edge, like the 联系咨询 dock on ft.tech. */
 function SideDock() {
-  const { me } = useMe();
+  const creating = useLocation().pathname === '/create';
   return (
     <div className="fixed right-5 bottom-24 z-30 hidden flex-col items-center gap-3 md:flex">
-      <Link
-        to={me ? '/create' : '/login'}
-        className="flex w-11 flex-col items-center gap-1.5 rounded-full bg-brand py-3 text-white shadow-[0_6px_16px_rgb(28_85_251/0.35)] transition hover:bg-brand-hover"
-      >
-        <Plus className="size-5" />
-        <span className="flex flex-col text-[13px] leading-[1.2]">
-          {Array.from('发起市场').map((ch) => (
-            <span key={ch}>{ch}</span>
-          ))}
-        </span>
-      </Link>
+      {!creating && (
+        <Link
+          to="/create"
+          className="flex w-11 flex-col items-center gap-1.5 rounded-full bg-brand py-3 text-white shadow-[0_6px_16px_rgb(28_85_251/0.35)] transition hover:bg-brand-hover"
+        >
+          <Plus className="size-5" />
+          <span className="flex flex-col text-[13px] leading-[1.2]">
+            {Array.from('发起市场').map((ch) => (
+              <span key={ch}>{ch}</span>
+            ))}
+          </span>
+        </Link>
+      )}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         className="flex size-11 items-center justify-center rounded-full border border-line bg-panel text-brand shadow-[0_4px_12px_rgb(29_33_41/0.08)] transition hover:border-brand"
@@ -354,7 +360,7 @@ function Footer() {
       title: '社区',
       links: [
         { to: '/leaderboard', label: '预言家榜' },
-        { to: me ? '/create' : '/login', label: '发起市场' },
+        { to: '/create', label: '发起市场' },
       ],
     },
     {

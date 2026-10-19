@@ -244,4 +244,70 @@ export const migrations: string[] = [
     PRIMARY KEY (kind, market_id)
   );
   `,
+  /* 5: optional fully collateralized binary order books. Existing pool data is preserved. */ `
+  ALTER TABLE markets ADD COLUMN mode TEXT NOT NULL DEFAULT 'pool' CHECK (mode IN ('pool', 'polymarket'));
+  ALTER TABLE outcomes ADD COLUMN last_price INTEGER CHECK (last_price BETWEEN 1 AND 99);
+  ALTER TABLE outcomes ADD COLUMN mark_price REAL NOT NULL DEFAULT 50;
+  CREATE TABLE exchange_positions (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    outcome_id INTEGER NOT NULL REFERENCES outcomes(id),
+    market_id INTEGER NOT NULL REFERENCES markets(id),
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    reserved INTEGER NOT NULL DEFAULT 0 CHECK (reserved >= 0 AND reserved <= quantity),
+    PRIMARY KEY (user_id, outcome_id)
+  );
+  CREATE INDEX exchange_positions_market ON exchange_positions(market_id);
+  CREATE TABLE exchange_orders (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    market_id INTEGER NOT NULL REFERENCES markets(id),
+    outcome_id INTEGER NOT NULL REFERENCES outcomes(id),
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    price INTEGER NOT NULL CHECK (price BETWEEN 1 AND 99),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    remaining INTEGER NOT NULL CHECK (remaining >= 0 AND remaining <= quantity),
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled')),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX exchange_orders_book ON exchange_orders(market_id, status, outcome_id, side, price, id);
+  CREATE TABLE exchange_trades (
+    id INTEGER PRIMARY KEY,
+    market_id INTEGER NOT NULL REFERENCES markets(id),
+    outcome_id INTEGER NOT NULL REFERENCES outcomes(id),
+    maker_id INTEGER NOT NULL REFERENCES exchange_orders(id),
+    taker_id INTEGER NOT NULL REFERENCES exchange_orders(id),
+    price INTEGER NOT NULL CHECK (price BETWEEN 1 AND 99),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    kind TEXT NOT NULL CHECK (kind IN ('transfer', 'mint', 'merge')),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX exchange_trades_market ON exchange_trades(market_id, id);
+  ALTER TABLE ledger RENAME TO old_ledger;
+  CREATE TABLE ledger (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN ('signup', 'bonus', 'bet', 'payout', 'refund', 'split', 'merge', 'order_lock', 'order_release', 'sell')),
+    amount INTEGER NOT NULL,
+    balance_after INTEGER NOT NULL,
+    market_id INTEGER REFERENCES markets(id),
+    note TEXT,
+    created_at INTEGER NOT NULL
+  );
+  INSERT INTO ledger SELECT * FROM old_ledger;
+  DROP TABLE old_ledger;
+  CREATE INDEX ledger_user ON ledger(user_id, id);
+  `,
+  /* 6: user-scoped idempotent order submission for trading clients. */ `
+  ALTER TABLE exchange_orders ADD COLUMN client_order_id TEXT;
+  CREATE UNIQUE INDEX exchange_orders_client_id ON exchange_orders(user_id, client_order_id)
+    WHERE client_order_id IS NOT NULL;
+  `,
+  /* 7: maker-only limit orders; existing orders keep their original behavior. */ `
+  ALTER TABLE exchange_orders ADD COLUMN post_only INTEGER NOT NULL DEFAULT 0 CHECK (post_only IN (0, 1));
+  `,
+  /* 8: separate trading close from the earliest resolution time. */ `
+  ALTER TABLE markets ADD COLUMN settle_at INTEGER NOT NULL DEFAULT 0;
+  UPDATE markets SET settle_at = close_at;
+  CREATE INDEX markets_settlement ON markets(status, settle_at);
+  `,
 ];

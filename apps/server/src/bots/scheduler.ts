@@ -1,4 +1,5 @@
 import { DAY, MINUTE } from '../lib/time';
+import { expireExchangeOrders } from '../services/exchange';
 import { cancelOverdueMarkets } from '../services/bets';
 import type { MarketRow } from '../services/markets';
 import { createAiMarket, placeAiBet, RECHECK_AFTER, resolveAiMarket, type BotDeps } from './agent';
@@ -44,14 +45,15 @@ export function startBots(deps: BotDeps, botIds: number[]): () => void {
 
   const tick = () => {
     const now = deps.now();
+    expireExchangeOrders(deps.db, now);
     cancelOverdueMarkets(deps.db, now);
     const { bot, db } = deps;
 
     const due = db
       .prepare(
-        `SELECT * FROM markets WHERE is_ai = 1 AND status = 'open' AND close_at <= ?
+        `SELECT * FROM markets WHERE is_ai = 1 AND status = 'open' AND settle_at <= ?
             AND (ai_checked_at IS NULL OR ai_checked_at <= ?)
-          ORDER BY close_at LIMIT 1`,
+          ORDER BY settle_at LIMIT 1`,
       )
       .get(now, now - RECHECK_AFTER) as MarketRow | undefined;
     if (due) run('resolve', () => resolveAiMarket({ ...deps, log }, due));

@@ -42,9 +42,13 @@ export interface Outcome {
   probability: number;
   /** Probability change over the last 24h, or null when unknown. */
   change24h: number | null;
+  /** Actual best resting prices for Polymarket outcomes; null when that side has no orders. */
+  bestBid?: number | null;
+  bestAsk?: number | null;
 }
 
 export interface MarketSummary {
+  mode: 'pool' | 'polymarket';
   id: number;
   question: string;
   category: string;
@@ -52,9 +56,11 @@ export interface MarketSummary {
   isBinary: boolean;
   /** Created by an AI bot; lives in the AI zone. */
   isAi: boolean;
-  /** Everything staked so far (the pot winners split). */
+  /** Pool pot, or currently locked complete-set collateral for a Polymarket market. */
   pot: number;
   closeAt: number;
+  /** Earliest time the creator may publish the result and settle. */
+  settleAt: number;
   createdAt: number;
   resolvedOutcomeId: number | null;
   bettorCount: number;
@@ -66,11 +72,11 @@ export interface MarketSummary {
 }
 
 export interface MarketDetail extends MarketSummary {
+  /** Pool-only automatic refund deadline; Polymarket markets never time out. */
+  resolveBy?: number;
   description: string;
   resolvedAt: number | null;
   resolutionNote: string | null;
-  /** If still unresolved at this time, the market is cancelled and everyone refunded. */
-  resolveBy: number;
 }
 
 /** A user's total stake on one outcome. */
@@ -135,7 +141,8 @@ export interface PortfolioBet {
   state: PortfolioState;
 }
 
-export type LedgerKind = 'signup' | 'bonus' | 'bet' | 'payout' | 'refund';
+export type LedgerKind =
+  'signup' | 'bonus' | 'bet' | 'payout' | 'refund' | 'split' | 'merge' | 'order_lock' | 'order_release' | 'sell';
 
 export interface LedgerEntry {
   id: number;
@@ -150,13 +157,13 @@ export interface LedgerEntry {
 
 export interface UserStats {
   balance: number;
-  /** Stakes in markets that have not been settled yet. */
+  /** Net cash invested in unresolved markets, including order escrow; may be negative after sales/merges. */
   staked: number;
-  /** balance + staked */
+  /** Book value: funded + profit (also balance + staked); excludes all unresolved market P&L. */
   netWorth: number;
   /** Total currency received for free (signup and daily bonus). */
   funded: number;
-  /** netWorth - funded: only settled bets move it. */
+  /** Net ledger cash flow from resolved/cancelled markets only, including all trades and payouts. */
   profit: number;
   betCount: number;
   marketsBet: number;
@@ -165,6 +172,56 @@ export interface UserStats {
 export interface Portfolio {
   stats: UserStats;
   bets: PortfolioBet[];
+  exchangePositions: ExchangePortfolioPosition[];
+  exchangeOrders: ExchangePortfolioOrder[];
+}
+
+export interface ExchangePosition {
+  outcomeId: number;
+  quantity: number;
+  reserved: number;
+}
+export interface ExchangePortfolioPosition extends ExchangePosition {
+  marketId: number;
+  question: string;
+  outcomeLabel: string;
+  status: MarketStatus;
+  price: number;
+}
+export interface ExchangeOrder {
+  postOnly: boolean;
+  clientOrderId: string | null;
+  id: number;
+  outcomeId: number;
+  side: 'buy' | 'sell';
+  price: number;
+  quantity: number;
+  remaining: number;
+  status: 'open' | 'filled' | 'cancelled';
+  createdAt: number;
+}
+export interface ExchangePortfolioOrder extends ExchangeOrder {
+  marketId: number;
+  question: string;
+  outcomeLabel: string;
+}
+export interface BookLevel {
+  price: number;
+  quantity: number;
+}
+export interface ExchangeState {
+  collateral: number;
+  books: { outcomeId: number; bids: BookLevel[]; asks: BookLevel[]; lastPrice: number | null }[];
+  positions: ExchangePosition[];
+  orders: ExchangeOrder[];
+  trades: {
+    id: number;
+    outcomeId: number;
+    price: number;
+    quantity: number;
+    kind: 'transfer' | 'mint' | 'merge';
+    createdAt: number;
+  }[];
 }
 
 export interface UserProfile {

@@ -97,10 +97,11 @@ function remindersDue(db: DB, kind: string, closedBefore: number, closedAfter: n
          JOIN users u ON u.id = m.creator_id
          JOIN wecom_bindings wb ON wb.user_id = m.creator_id
         WHERE m.status = 'open' AND m.is_ai = 0 AND wb.chat_id IS NOT NULL
-          AND m.close_at <= ? AND m.close_at > ?
+          AND m.settle_at <= ? AND m.settle_at > ?
+          AND (? <> 'deadline' OR m.mode = 'pool')
           AND NOT EXISTS (SELECT 1 FROM wecom_notices n WHERE n.kind = ? AND n.market_id = m.id)`,
     )
-    .all(closedBefore, closedAfter, kind) as ReminderRow[];
+    .all(closedBefore, closedAfter, kind, kind) as ReminderRow[];
 }
 
 /** One pass: settlement results, then reminders for creators who still have to announce a result. */
@@ -132,10 +133,9 @@ export async function sendNotices(deps: NotifierDeps): Promise<void> {
     if (!claim(db, 'closed', m.id, now)) continue;
     await send(
       m.chat_id,
-      `⏰ ${m.display_name}，你建的「${m.question}」已经截止下注，可以公布结果了：@我 说「结果是 …」，或者[去网站公布](${marketUrl(deps.siteUrl, m.id)})。${RESOLVE_GRACE_DAYS} 天内不公布会自动取消并退款。`,
+      `⏰ ${m.display_name}，你建的「${m.question}」已经截止下注，可以公布结果了：@我 说「结果是 …」，或者[去网站公布](${marketUrl(deps.siteUrl, m.id)})。${m.mode === 'pool' ? `结算时间后 ${RESOLVE_GRACE_DAYS} 天内不公布会自动取消并退款。` : '未公布时保留持仓和抵押资金等待结算，不会自动取消。'}`,
     );
   }
-
   const lastDay = now - (RESOLVE_GRACE_DAYS - 1) * DAY;
   for (const m of remindersDue(db, 'deadline', lastDay, now - RESOLVE_GRACE_DAYS * DAY)) {
     if (!claim(db, 'deadline', m.id, now)) continue;

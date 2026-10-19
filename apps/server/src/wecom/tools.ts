@@ -9,7 +9,6 @@ import {
   MIN_BET,
   payoutMultiplier,
   previewBet,
-  RESOLVE_GRACE_DAYS,
   toCents,
   type MarketSummary,
 } from '@watercooler/shared';
@@ -69,6 +68,7 @@ const STATUS_LABEL = { open: '可下注', closed: '已截止待公布', resolved
 function compactMarket(ctx: ToolContext, m: MarketSummary) {
   return {
     id: m.id,
+    mode: m.mode,
     question: m.question,
     status: STATUS_LABEL[m.status],
     zone: m.isAi ? 'AI 专区' : '大家的盘',
@@ -79,8 +79,9 @@ function compactMarket(ctx: ToolContext, m: MarketSummary) {
     creator: m.creator.displayName,
     outcomes: m.outcomes.map((o) => ({
       label: o.label,
-      probability: pct(o.probability),
-      pool: o.pool,
+      ...(m.mode === 'polymarket'
+        ? { bestBid: o.bestBid ?? null, bestAsk: o.bestAsk ?? null }
+        : { probability: pct(o.probability), pool: o.pool }),
       ...(m.resolvedOutcomeId === o.id ? { winner: true } : {}),
     })),
   };
@@ -168,6 +169,15 @@ const tools: ToolDef[] = [
     run: (ctx, input) => {
       const row = findMarket(ctx.db, input.marketId);
       const m = getMarketDetail(ctx.db, row.id, ctx.now);
+      if (m.mode === 'polymarket')
+        return {
+          ...compactMarket(ctx, m),
+          description: m.description.slice(0, 1500),
+          settleAt: formatTime(m.settleAt, ctx.config.timezone),
+          trading:
+            'Polymarket 使用份额订单簿，请到网站查看盘口和交易；市场不可取消，未公布结果时保留持仓和抵押资金等待结算。',
+          url: marketUrl(ctx.siteUrl, m.id),
+        };
       const pools = m.outcomes.map((o) => o.pool);
       const stakes = getUserStakes(ctx.db, ctx.userId, m.id);
       return {
@@ -185,7 +195,8 @@ const tools: ToolDef[] = [
           };
         }),
         createdByMe: m.creator.id === ctx.userId,
-        ...(m.status === 'closed' ? { autoCancelAt: formatTime(m.resolveBy, ctx.config.timezone) } : {}),
+        settleAt: formatTime(m.settleAt, ctx.config.timezone),
+        autoCancelAt: formatTime(m.resolveBy!, ctx.config.timezone),
         resolutionNote: m.resolutionNote,
         url: marketUrl(ctx.siteUrl, m.id),
       };
@@ -194,7 +205,8 @@ const tools: ToolDef[] = [
   {
     tool: {
       name: 'my_account',
-      description: '用户自己的账户：余额、能否签到、盈亏和排名、进行中的押注、自己建的待公布的盘。',
+      description:
+        '用户自己的账户：余额、能否签到、已结算盈亏和排名、进行中的押注、自己建的待公布的盘。净值和排名不计入未结算市场的盈亏。',
       input_schema: { type: 'object', properties: {} },
     },
     run: (ctx) => {
@@ -238,11 +250,12 @@ const tools: ToolDef[] = [
   {
     tool: {
       name: 'leaderboard',
-      description: '排行榜（只有人，不含 AI 机器人）。',
+      description:
+        '排行榜（只有人，不含 AI 机器人）。盈利仅统计已结算市场的净收支，净值为注册及签到奖励加已结算盈利；未结算交易不影响这两项排名。',
       input_schema: {
         type: 'object',
         properties: {
-          sort: { type: 'string', enum: ['profit', 'netWorth', 'bets'], description: '盈利、总资产或下注次数' },
+          sort: { type: 'string', enum: ['profit', 'netWorth', 'bets'], description: '已结算盈利、入账净值或下注次数' },
           limit: { type: 'integer', minimum: 1, maximum: 20 },
         },
       },
@@ -288,6 +301,8 @@ const tools: ToolDef[] = [
     },
     run: (ctx, input) => {
       const market = findMarket(ctx.db, input.marketId);
+      if (market.mode !== 'pool')
+        throw new ToolError(`Polymarket 使用份额订单，请到网站交易：${marketUrl(ctx.siteUrl, market.id)}`);
       if (!isBettable(market, ctx.now)) throw new ToolError('这个市场已经停止下注了');
       const outcomes = getOutcomeRows(ctx.db, market.id);
       const outcome = findOutcome(outcomes, input.outcome);
@@ -386,7 +401,7 @@ const tools: ToolDef[] = [
     tool: {
       name: 'resolve_market',
       description:
-        '公布用户自己创建的市场的结果并结算（押中的人按比例分走整个奖池）。不会马上执行：会发确认卡片，用户确认后才结算，结算后不能撤销。',
+        '公布用户自己创建的市场的结果并结算：奖池模式按押注比例分配；Polymarket 获胜份额每份兑回 1，落败份额兑回 0。不会马上执行：会发确认卡片，用户确认后才结算，结算后不能撤销。',
       input_schema: {
         type: 'object',
         properties: {
@@ -404,7 +419,13 @@ const tools: ToolDef[] = [
       const outcomes = getOutcomeRows(ctx.db, market.id);
       const outcome = findOutcome(outcomes, input.outcome);
       const winners = (
-        ctx.db.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM bets WHERE outcome_id = ?').get(outcome.id) as {
+        ctx.db
+          .prepare(
+            market.mode === 'polymarket'
+              ? 'SELECT COUNT(DISTINCT user_id) AS n FROM exchange_positions WHERE outcome_id = ? AND quantity > 0'
+              : 'SELECT COUNT(DISTINCT user_id) AS n FROM bets WHERE outcome_id = ?',
+          )
+          .get(outcome.id) as {
           n: number;
         }
       ).n;
@@ -418,8 +439,13 @@ const tools: ToolDef[] = [
           desc: market.question,
           rows: [
             ['结果', outcome.label],
-            ['奖池', `${fromCents(market.pot)} ${CURRENCY_NAME}`],
-            ['押中人数', winners > 0 ? String(winners) : '没人押中，全部退还'],
+            [market.mode === 'polymarket' ? '抵押资金' : '奖池', `${fromCents(market.pot)} ${CURRENCY_NAME}`],
+            market.mode === 'polymarket'
+              ? ['获胜持有人', String(winners)]
+              : ['押中人数', winners > 0 ? String(winners) : '没人押中，全部退还'],
+            ...(market.mode === 'polymarket'
+              ? [['兑付规则', `获胜每份兑回 1 ${CURRENCY_NAME}，落败每份兑回 0`] as [string, string]]
+              : []),
           ],
           note: `${early ? '还没到截止时间，确认后提前结束下注并结算。' : ''}结算后不能撤销。${note ? `说明：${note}` : ''}`,
           url: marketUrl(ctx.siteUrl, market.id),
@@ -430,7 +456,8 @@ const tools: ToolDef[] = [
   {
     tool: {
       name: 'cancel_market',
-      description: '取消用户自己创建的市场，所有押注全额退还。不会马上执行：会发确认卡片，用户确认后才取消。',
+      description:
+        '取消用户自己创建的奖池市场，所有押注全额退还；Polymarket 市场不可取消。不会马上执行：会发确认卡片，用户确认后才取消。',
       input_schema: {
         type: 'object',
         properties: {
@@ -443,6 +470,8 @@ const tools: ToolDef[] = [
     run: (ctx, input) => {
       const market = findMarket(ctx.db, input.marketId);
       if (market.creator_id !== ctx.userId) throw new ToolError('只有市场创建者可以取消，这个盘不是用户建的');
+      if (market.mode === 'polymarket')
+        throw new ToolError('Polymarket 市场不可取消，只能等待公布结果结算；未成交订单请到网站撤销');
       if (market.status !== 'open') throw new ToolError('这个市场已经结算或取消了');
       const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 1000) : undefined;
       return propose(
@@ -475,4 +504,4 @@ export function runTool(ctx: ToolContext, name: string, input: unknown): { conte
   }
 }
 
-export const RULES = `玩法（奖池制）：每个选项一个奖池，押注进入所选选项的奖池；概率 = 该选项奖池占总奖池的比例。结果公布后，押中的人按押注比例分走整个奖池（包括押错的人的钱）；没人押中就全部退还。网站不抽成也不补贴。市场由创建者自己公布结果或取消，截止后 ${RESOLVE_GRACE_DAYS} 天没公布会自动取消并退款。AI 专区的题由 AI 机器人出题和公布，人可以去押注。`;
+export const RULES = `玩法（奖池制）：每个选项一个奖池，押注进入所选选项的奖池；概率 = 该选项奖池占总奖池的比例。结果公布后，押中的人按押注比例分走整个奖池（包括押错的人的钱）；没人押中就全部退还。网站不抽成也不补贴。市场由创建者自己公布结果，只有奖池市场可主动取消。停止交易与结算时间分开设置，到结算时间后可公布；奖池模式在结算时间后 7 天未公布会自动取消并退款；Polymarket 市场不可取消，保留持仓和抵押资金等待结算，未成交订单仍可撤销。AI 专区的题由 AI 机器人出题和公布，人可以去押注。`;

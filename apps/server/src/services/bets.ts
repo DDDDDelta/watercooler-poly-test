@@ -9,8 +9,9 @@ import {
   type Stake,
 } from '@watercooler/shared';
 import type { DB } from '../db';
-import { conflict, forbidden, notFound } from '../lib/http';
+import { badRequest, conflict, forbidden, notFound } from '../lib/http';
 import { DAY } from '../lib/time';
+import { settleExchange } from './exchange';
 import {
   getMarketRow,
   getOutcomeRows,
@@ -128,6 +129,7 @@ export function listHolders(db: DB, marketId: number, perOutcome = 10): Holder[]
 export function placeBet(db: DB, userId: number, marketId: number, input: BetInput, now: number): number {
   return db.transaction(() => {
     const market = getMarketRow(db, marketId);
+    if (market.mode !== 'pool') throw badRequest('Polymarket 模式请使用订单交易');
     if (!isBettable(market, now)) throw conflict('该市场已停止下注');
     const bettor = db.prepare('SELECT is_bot FROM users WHERE id = ?').get(userId) as { is_bot: 0 | 1 } | undefined;
     if (bettor?.is_bot && !market.is_ai) throw forbidden('机器人只能在 AI 专区下注');
@@ -181,13 +183,16 @@ export function resolveMarket(
     const market = getMarketRow(db, marketId);
     assertCreator(market, actorId);
     assertUnsettled(market);
+    if (now < market.settle_at) throw conflict('尚未到结算时间，暂不能公布结果');
     const outcomes = getOutcomeRows(db, marketId);
     if (!outcomes.some((o) => o.id === outcomeId)) throw notFound('选项不存在');
 
     const winners = db
       .prepare('SELECT user_id, SUM(amount) AS stake FROM bets WHERE outcome_id = ? GROUP BY user_id ORDER BY user_id')
       .all(outcomeId) as { user_id: number; stake: number }[];
-    if (winners.length === 0) {
+    if (market.mode === 'polymarket') {
+      settleExchange(db, marketId, outcomeId, now);
+    } else if (winners.length === 0) {
       refundAll(db, marketId, '没有人押中，全部退还', now);
     } else {
       const payouts = splitPot(
@@ -211,7 +216,7 @@ export function resolveMarket(
   })();
 }
 
-/** Void the market and refund every stake. `actorId` is null when the system does it. */
+/** Pool markets can be cancelled; Polymarket positions always wait for a result. */
 export function cancelMarket(
   db: DB,
   marketId: number,
@@ -222,6 +227,8 @@ export function cancelMarket(
   db.transaction(() => {
     const market = getMarketRow(db, marketId);
     if (actorId !== null) assertCreator(market, actorId);
+    if (market.mode === 'polymarket')
+      throw forbidden('Polymarket 市场不可取消，只能等待公布结果结算；未成交订单仍可撤销');
     assertUnsettled(market);
     refundAll(db, marketId, '市场取消，全部退还', now);
     db.prepare(
@@ -231,18 +238,20 @@ export function cancelMarket(
   })();
 }
 
-/** Cancel and refund markets whose creator let the deadline pass without announcing a result. */
+/** Only pool markets expire; Polymarket collateral and positions wait indefinitely. */
 export function cancelOverdueMarkets(db: DB, now: number): void {
-  const overdue = db
-    .prepare(`SELECT * FROM markets WHERE status = 'open' AND close_at <= ?`)
-    .all(now - RESOLVE_GRACE_DAYS * DAY) as MarketRow[];
-  for (const m of overdue) {
-    cancelMarket(
-      db,
-      m.id,
-      null,
-      `创建者超过 ${RESOLVE_GRACE_DAYS} 天没有公布结果，已自动取消并退款`,
-      resolveDeadline(m),
-    );
-  }
+  db.transaction(() => {
+    const overdue = db
+      .prepare(`SELECT * FROM markets WHERE mode = 'pool' AND status = 'open' AND settle_at <= ?`)
+      .all(now - RESOLVE_GRACE_DAYS * DAY) as MarketRow[];
+    for (const m of overdue) {
+      cancelMarket(
+        db,
+        m.id,
+        null,
+        `创建者超过 ${RESOLVE_GRACE_DAYS} 天没有公布结果，已自动取消并退款`,
+        resolveDeadline(m),
+      );
+    }
+  })();
 }

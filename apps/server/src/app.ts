@@ -5,6 +5,8 @@ import { loadSessionUser } from './lib/session';
 import { authRoutes } from './routes/auth';
 import { marketRoutes } from './routes/markets';
 import { userRoutes } from './routes/users';
+import { tradingRoutes } from './routes/trading';
+import { expireExchangeOrders } from './services/exchange';
 import { wecomRoutes } from './routes/wecom';
 import { cancelOverdueMarkets } from './services/bets';
 
@@ -33,7 +35,8 @@ export function createApp(deps: AppDeps) {
   });
 
   api.use('*', async (c, next) => {
-    // Settle overdue markets lazily, so every response already reflects the refunds.
+    // Release open orders at trading close; positions wait for the creator's resolution.
+    expireExchangeOrders(deps.db, deps.now());
     cancelOverdueMarkets(deps.db, deps.now());
     c.set('user', loadSessionUser(c, deps.db, deps.config.basePath || '/', deps.now()));
     if (deps.config.privateMode && !c.get('user') && !PUBLIC_IN_PRIVATE_MODE.has(c.req.path)) {
@@ -45,6 +48,7 @@ export function createApp(deps: AppDeps) {
   api.route('/', authRoutes(deps));
   api.route('/', marketRoutes(deps));
   api.route('/', userRoutes(deps));
+  api.route('/', tradingRoutes(deps));
   api.route('/', wecomRoutes(deps));
 
   api.notFound((c) => c.json({ error: '接口不存在' }, 404));

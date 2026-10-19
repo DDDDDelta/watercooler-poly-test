@@ -1,12 +1,13 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LedgerKind } from '@watercooler/shared';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Money } from '../components/Money';
 import { BetsTable } from '../components/BetsTable';
 import { Button, Card, PageLoader, Segmented, Stat } from '../components/ui';
-import { api } from '../lib/api';
+import { api, errorMessage } from '../lib/api';
 import { formatDate, formatSigned } from '../lib/format';
 
 const LEDGER_LABEL: Record<LedgerKind, string> = {
@@ -15,6 +16,11 @@ const LEDGER_LABEL: Record<LedgerKind, string> = {
   bet: '下注',
   payout: '押中奖金',
   refund: '退款',
+  split: '抵押生成 Yes + No',
+  merge: '合并赎回',
+  order_lock: '买单冻结资金',
+  order_release: '订单解冻 / 价差退回',
+  sell: '卖出份额',
 };
 
 function Ledger() {
@@ -64,6 +70,18 @@ function Ledger() {
 
 export default function PortfolioPage() {
   const [tab, setTab] = useState<'active' | 'closed' | 'ledger'>('active');
+  const qc = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: ({ marketId, orderId }: { marketId: number; orderId: number }) => api.cancelOrder(marketId, orderId),
+    onSuccess: () => {
+      toast.success('订单已撤销，剩余冻结资产已释放');
+      void qc.invalidateQueries();
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      void qc.invalidateQueries();
+    },
+  });
   const { data } = useQuery({ queryKey: ['portfolio'], queryFn: api.portfolio, refetchInterval: 15_000 });
   if (!data) return <PageLoader />;
   const { stats, bets } = data;
@@ -74,21 +92,76 @@ export default function PortfolioPage() {
     <div>
       <h1 className="section-title">我的下注</h1>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="总资产">
+        <Stat label="入账净值">
           <Money value={stats.netWorth} />
         </Stat>
         <Stat label="可用余额">
           <Money value={stats.balance} />
         </Stat>
-        <Stat label="下注中">
+        <Stat label="未结算净投入">
           <Money value={stats.staked} />
         </Stat>
-        <Stat label="累计盈亏">
+        <Stat label="已结算盈亏">
           <span className={stats.profit >= 0 ? 'text-yes' : 'text-no'}>
             <Money value={stats.profit} signed />
           </span>
         </Stat>
       </div>
+      <p className="mt-3 text-xs text-faint">
+        入账净值 = 注册及签到奖励 +
+        已结算盈亏。未结算净投入含冻结资金，回款超过投入时可为负；交易盈亏等市场最终结算后计入排名。
+      </p>
+      {data.exchangeOrders.length > 0 && (
+        <Card className="mt-6 p-5">
+          <h2 className="font-semibold">Polymarket 未成交订单</h2>
+          <ul className="mt-3 divide-y divide-line">
+            {data.exchangeOrders.map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                <div className="min-w-0">
+                  <Link to={`/market/${o.marketId}`} className="text-brand">
+                    {o.question}
+                  </Link>
+                  <p className="mt-1 text-xs text-dim">
+                    #{o.id} {o.side === 'buy' ? '买' : '卖'} {o.outcomeLabel} @ {o.price.toFixed(2)} · 剩余{' '}
+                    {o.remaining} 份 ·{' '}
+                    {o.side === 'buy' ? `冻结 ${(o.price * o.remaining).toFixed(2)} 水滴` : `冻结 ${o.remaining} 份`}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={cancel.isPending}
+                  loading={cancel.isPending && cancel.variables?.orderId === o.id}
+                  aria-label={`撤销订单 #${o.id}`}
+                  onClick={() => cancel.mutate({ marketId: o.marketId, orderId: o.id })}
+                >
+                  撤单
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {data.exchangePositions.length > 0 && (
+        <Card className="mt-6 p-5">
+          <h2 className="font-semibold">Polymarket 份额</h2>
+          <p className="mt-1 text-xs text-faint">持有数量包含卖单冻结份额；已结算份额仅作历史记录，兑付见资金流水。</p>
+          <ul className="mt-3 divide-y divide-line">
+            {data.exchangePositions.map((p) => (
+              <li key={p.outcomeId} className="flex justify-between gap-3 py-3 text-sm">
+                <Link to={`/market/${p.marketId}`} className="min-w-0 truncate text-brand">
+                  {p.question} · {p.outcomeLabel}
+                </Link>
+                <span className="shrink-0 font-mono">
+                  {p.quantity} 份 · {p.status === 'open' || p.status === 'closed' ? `冻结 ${p.reserved}` : '已结算'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card className="mt-6 p-5">
         <Segmented
           variant="tabs"

@@ -30,17 +30,6 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
     });
   }
 
-  const staked = db
-    .prepare(
-      `SELECT b.user_id, SUM(b.amount) AS total FROM bets b JOIN markets m ON m.id = b.market_id
-        WHERE m.status = 'open' GROUP BY b.user_id`,
-    )
-    .all() as { user_id: number; total: number }[];
-  for (const r of staked) {
-    const s = stats.get(r.user_id);
-    if (s) s.staked = fromCents(r.total);
-  }
-
   const funded = db
     .prepare(`SELECT user_id, SUM(amount) AS total FROM ledger WHERE kind IN ('signup', 'bonus') GROUP BY user_id`)
     .all() as { user_id: number; total: number }[];
@@ -49,8 +38,26 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
     if (s) s.funded = fromCents(f.total);
   }
 
+  // Recognize a market's complete cash flow only after resolution/cancellation.
+  // Quotes and even small wash trades must not revalue anyone's remaining inventory.
+  const settled = db
+    .prepare(
+      `SELECT l.user_id, SUM(l.amount) AS total FROM ledger l JOIN markets m ON m.id = l.market_id
+        WHERE m.status <> 'open' GROUP BY l.user_id`,
+    )
+    .all() as { user_id: number; total: number }[];
+  for (const r of settled) {
+    const s = stats.get(r.user_id);
+    if (s) s.profit = fromCents(r.total);
+  }
+
   const activity = db
-    .prepare('SELECT user_id, COUNT(*) AS bets, COUNT(DISTINCT market_id) AS markets FROM bets GROUP BY user_id')
+    .prepare(
+      `SELECT user_id, COUNT(*) AS bets, COUNT(DISTINCT market_id) AS markets FROM (
+      SELECT user_id, market_id FROM bets
+      UNION ALL SELECT user_id, market_id FROM exchange_orders WHERE remaining < quantity
+    ) GROUP BY user_id`,
+    )
     .all() as { user_id: number; bets: number; markets: number }[];
   for (const a of activity) {
     const s = stats.get(a.user_id);
@@ -61,8 +68,10 @@ export function computeAllStats(db: DB): Map<number, UserStats> {
   }
 
   for (const s of stats.values()) {
-    s.netWorth = round2(s.balance + s.staked);
-    s.profit = round2(s.netWorth - s.funded);
+    s.netWorth = round2(s.funded + s.profit);
+    // Net cash invested in unresolved markets, including order escrow. It may be
+    // negative when sales/merges have already returned more than the user paid in.
+    s.staked = round2(s.netWorth - s.balance);
   }
   return stats;
 }
@@ -204,10 +213,14 @@ export function siteStats(db: DB, now: number): SiteStats {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM markets WHERE is_ai = 0 AND status = 'open' AND close_at > ?) AS open_markets,
-         (SELECT COALESCE(SUM(pot), 0) FROM markets WHERE is_ai = 0)                          AS total_staked,
-         (SELECT COUNT(DISTINCT b.user_id) FROM bets b
-            JOIN markets m ON m.id = b.market_id WHERE m.is_ai = 0)                          AS bettors,
-         (SELECT COUNT(*) FROM users WHERE is_bot = 0)                                        AS users`,
+         ((SELECT COALESCE(SUM(pot), 0) FROM markets WHERE mode = 'pool' AND is_ai = 0) +
+           (SELECT COALESCE(SUM(t.price * t.quantity), 0) FROM exchange_trades t
+             JOIN markets m ON m.id = t.market_id WHERE m.is_ai = 0)) AS total_staked,
+         (SELECT COUNT(DISTINCT user_id) FROM (
+           SELECT b.user_id FROM bets b JOIN markets m ON m.id = b.market_id WHERE m.is_ai = 0
+           UNION ALL SELECT o.user_id FROM exchange_orders o JOIN markets m ON m.id = o.market_id
+             WHERE m.is_ai = 0 AND o.remaining < o.quantity)) AS bettors,
+         (SELECT COUNT(*) FROM users WHERE is_bot = 0) AS users`,
     )
     .get(now) as { open_markets: number; total_staked: number; bettors: number; users: number };
   return {

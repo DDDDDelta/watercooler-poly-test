@@ -50,11 +50,14 @@ export default function Leaderboard() {
         value={sort}
         onChange={setSort}
         options={[
-          { value: 'profit', label: '盈利' },
-          { value: 'netWorth', label: '总资产' },
+          { value: 'profit', label: '已结算盈利' },
+          { value: 'netWorth', label: '入账净值' },
           { value: 'bets', label: '下注次数' },
         ]}
       />
+      <p className="mt-3 text-center text-xs text-faint">
+        盈利只统计已结算市场的净收支；入账净值 = 注册及签到奖励 + 已结算盈利。未结算交易暂不计入。
+      </p>
 
       <div className="mt-10 grid grid-cols-3 items-start gap-3 sm:gap-6">
         {podium.map((e, i) => {
